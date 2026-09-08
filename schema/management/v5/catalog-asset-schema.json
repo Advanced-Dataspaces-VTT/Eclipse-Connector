@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "title": "CatalogAssetSchema",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "#/definitions/CatalogAsset"
+    }
+  ],
+  "$id": "https://w3id.org/edc/connector/management/schema/v5/catalog-asset-schema.json",
+  "definitions": {
+    "CatalogAsset": {
+      "type": "object",
+      "properties": {
+        "@context": {
+          "$ref": "https://w3id.org/edc/connector/management/schema/v4/context-schema.json"
+        },
+        "@type": {
+          "type": "string",
+          "const": "CatalogAsset"
+        },
+        "@id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "example": {
+            "endpointURL": "http://catalog/url",
+            "format": "http://w3c.org/dspace/profile/catalog"
+          },
+          "properties": {
+            "endpointURL": {
+              "type": "string"
+            },
+            "format": {
+              "type": "string"
+            }
+          },
+          "required": ["endpointURL", "format"]
+        },
+        "privateProperties": {
+          "type": "object"
+        },
+        "isCatalog": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "@context",
+        "@type",
+        "properties"
+      ]
+    }
+  }
+}
