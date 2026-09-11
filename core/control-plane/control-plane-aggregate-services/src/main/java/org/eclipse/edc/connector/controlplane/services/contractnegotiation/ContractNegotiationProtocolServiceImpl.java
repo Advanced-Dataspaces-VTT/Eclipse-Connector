@@ -308,6 +308,15 @@ public class ContractNegotiationProtocolServiceImpl implements ContractNegotiati
 
         if (negotiation.getType().equals(CONSUMER) && negotiation.canBeAgreedConsumer()) {
 
+            // A consumer needs the provider PID to address verification and
+            // termination messages. Older/lenient peers may omit it from the
+            // initial acknowledgement, so recover it from the agreement.
+            if (negotiation.getCorrelationId() == null && message.getProviderPid() != null) {
+                negotiation.setCorrelationId(message.getProviderPid());
+                monitor.debug(() -> "[Consumer] Recovered provider PID from contract agreement: "
+                        + message.getProviderPid());
+            }
+
             var agreementWithClaims = message.getContractAgreement().toBuilder()
                     .participantContextId(negotiation.getParticipantContextId())
                     .claims(agent.getClaims())
