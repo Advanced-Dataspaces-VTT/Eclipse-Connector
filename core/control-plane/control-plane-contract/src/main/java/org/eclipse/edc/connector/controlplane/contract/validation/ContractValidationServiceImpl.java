@@ -31,6 +31,7 @@ import org.eclipse.edc.participant.spi.ParticipantAgent;
 import org.eclipse.edc.policy.engine.spi.PolicyEngine;
 import org.eclipse.edc.policy.model.Policy;
 import org.eclipse.edc.spi.query.Criterion;
+import org.eclipse.edc.spi.monitor.Monitor;
 import org.eclipse.edc.spi.result.Result;
 import org.jetbrains.annotations.NotNull;
 
@@ -50,13 +51,16 @@ public class ContractValidationServiceImpl implements ContractValidationService 
     private final AssetIndex assetIndex;
     private final PolicyEngine policyEngine;
     private final PolicyEquality policyEquality;
+    private final Monitor monitor;
 
     public ContractValidationServiceImpl(AssetIndex assetIndex,
                                          PolicyEngine policyEngine,
-                                         PolicyEquality policyEquality) {
+                                         PolicyEquality policyEquality,
+                                         Monitor monitor) {
         this.assetIndex = assetIndex;
         this.policyEngine = policyEngine;
         this.policyEquality = policyEquality;
+        this.monitor = monitor;
     }
 
     @Override
@@ -134,7 +138,10 @@ public class ContractValidationServiceImpl implements ContractValidationService 
             return failure("No offer found");
         }
 
-        if (!policyEquality.test(agreement.getPolicy().withTarget(latestOffer.getAssetId()), latestOffer.getPolicy())) {
+        var agreementPolicy = agreement.getPolicy().withTarget(latestOffer.getAssetId());
+        if (!policyEquality.test(agreementPolicy, latestOffer.getPolicy())) {
+            monitor.debug(() -> "[ContractValidation] Policy mismatch during agreement validation: "
+                    + policyEquality.describeDifference(agreementPolicy, latestOffer.getPolicy()));
             return failure("Policy in the contract agreement is not equal to the one in the contract offer");
         }
 

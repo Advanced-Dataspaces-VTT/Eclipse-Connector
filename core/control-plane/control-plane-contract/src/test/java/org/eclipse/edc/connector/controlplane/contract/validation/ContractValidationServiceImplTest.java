@@ -35,6 +35,7 @@ import org.eclipse.edc.policy.engine.spi.PolicyContext;
 import org.eclipse.edc.policy.engine.spi.PolicyEngine;
 import org.eclipse.edc.policy.model.Policy;
 import org.eclipse.edc.spi.result.Result;
+import org.eclipse.edc.spi.monitor.Monitor;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -72,9 +73,10 @@ class ContractValidationServiceImplTest {
     private final AssetIndex assetIndex = mock();
     private final PolicyEngine policyEngine = mock();
     private final PolicyEquality policyEquality = mock();
+    private final Monitor monitor = mock();
 
     private final ContractValidationService validationService =
-            new ContractValidationServiceImpl(assetIndex, policyEngine, policyEquality);
+            new ContractValidationServiceImpl(assetIndex, policyEngine, policyEquality, monitor);
 
     private static ContractDefinition.Builder createContractDefinitionBuilder() {
         return ContractDefinition.Builder.newInstance()

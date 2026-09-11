@@ -33,12 +33,26 @@ public class PolicyEquality implements BiPredicate<Policy, Policy> {
 
     @Override
     public boolean test(Policy one, Policy two) {
-        var oneTree = mapper.<ObjectNode>valueToTree(one);
-        var twoTree = mapper.<ObjectNode>valueToTree(two);
-        EXCLUDED_PROPERTIES.forEach(property -> {
-            oneTree.remove(property);
-            twoTree.remove(property);
-        });
+        var oneTree = comparableTree(one);
+        var twoTree = comparableTree(two);
         return oneTree.equals(twoTree);
+    }
+
+    /**
+     * Returns the exact serialized policy trees used by equality validation.
+     * This is intended for diagnostics when two negotiated policies differ.
+     */
+    public String describeDifference(Policy one, Policy two) {
+        var oneTree = comparableTree(one);
+        var twoTree = comparableTree(two);
+        return "agreement=" + oneTree + ", offer=" + twoTree;
+    }
+
+    private ObjectNode comparableTree(Policy policy) {
+        var tree = mapper.<ObjectNode>valueToTree(policy);
+        EXCLUDED_PROPERTIES.forEach(property -> {
+            tree.remove(property);
+        });
+        return tree;
     }
 }
