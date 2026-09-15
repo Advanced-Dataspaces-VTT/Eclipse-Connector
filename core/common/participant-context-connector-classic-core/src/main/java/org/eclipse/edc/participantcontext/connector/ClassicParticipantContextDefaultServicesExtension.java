@@ -50,10 +50,15 @@ public class ClassicParticipantContextDefaultServicesExtension implements Servic
     }
 
     @Provider(isDefault = true)
-    public SingleParticipantContextSupplier participantContextSupplier() {
-        var contextId = participantContextId != null ? participantContextId : participantId;
+    public SingleParticipantContextSupplier participantContextSupplier(ServiceExtensionContext context) {
+        var configuredParticipantId = context.getConfig().getString("edc.participant.id", participantId);
+        var configuredContextId = context.getConfig().getString("edc.participant.context.id", participantContextId);
+        var contextId = configuredContextId != null ? configuredContextId : configuredParticipantId;
+        if (configuredParticipantId == null || contextId == null) {
+            throw new IllegalStateException("Both edc.participant.id and edc.participant.context.id must be configured");
+        }
         var participantContext = ParticipantContext.Builder.newInstance().id(contextId)
-                .identity(participantId).build();
+                .identity(configuredParticipantId).build();
         return () -> ServiceResult.success(participantContext);
     }
 
@@ -71,6 +76,15 @@ public class ClassicParticipantContextDefaultServicesExtension implements Servic
 
     @Override
     public void initialize(ServiceExtensionContext context) {
+        // Keep this compatible with runtimes assembled from published 0.18
+        // dataplane modules: explicitly resolve the values from the merged
+        // configuration instead of relying only on field setting injection.
+        participantId = context.getConfig().getString("edc.participant.id", participantId);
+        participantContextId = context.getConfig().getString("edc.participant.context.id", participantContextId);
+
+        if (participantId == null || participantContextId == null) {
+            throw new IllegalStateException("Both edc.participant.id and edc.participant.context.id must be configured");
+        }
         if (ANONYMOUS_PARTICIPANT.equals(participantContextId)) {
             monitor.warning("The runtime is configured as an anonymous participant. DO NOT DO THIS IN PRODUCTION.");
         }
