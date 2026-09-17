@@ -21,6 +21,7 @@ import org.eclipse.edc.connector.controlplane.dataplane.spi.instance.DataPlaneIn
 import org.eclipse.edc.json.JacksonTypeManager;
 import org.eclipse.edc.signaling.domain.DataFlowPrepareMessage;
 import org.eclipse.edc.signaling.domain.DataFlowTerminateMessage;
+import org.eclipse.edc.signaling.domain.DspDataAddress;
 import org.eclipse.edc.signaling.spi.authorization.Header;
 import org.eclipse.edc.signaling.spi.authorization.SignalingAuthorization;
 import org.eclipse.edc.signaling.spi.authorization.SignalingAuthorizationRegistry;
@@ -136,6 +137,11 @@ class DataPlaneSignalingClientTest {
                     .datasetId("asset-id")
                     .participantId("participant-id")
                     .profile("s3-copy")
+                    .dataAddress(DspDataAddress.Builder.newInstance()
+                            .endpointType("S3")
+                            .endpoint("s3://destination-bucket")
+                            .property("keyName", "destination-key")
+                            .build())
                     .build();
 
             var result = client.prepare(message);
@@ -147,7 +153,10 @@ class DataPlaneSignalingClientTest {
                     .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/transferTypeDestination"))
                     .withRequestBody(containing("\"s3-copy\""))
                     .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/flowType"))
-                    .withRequestBody(containing("\"PULL\"")));
+                    .withRequestBody(containing("\"PULL\""))
+                    .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/endpointType"))
+                    .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/endpointProperties"))
+                    .withRequestBody(containing("destination-key")));
         }
 
         @Test

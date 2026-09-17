@@ -275,16 +275,26 @@ public class DataPlaneSignalingClient {
         }
         var target = json.putObject(key);
         target.put(JSON_LD_TYPE, EDC_NAMESPACE + "DataAddress");
-        add(target, EDC_NAMESPACE + "type", address.getEndpointType());
-        add(target, EDC_NAMESPACE + "endpoint", address.getEndpoint());
+        if (address.getEndpointType() != null) {
+            target.putObject(EDC_NAMESPACE + "endpointType")
+                    .put("@id", address.getEndpointType());
+        }
+        var properties = target.putArray(EDC_NAMESPACE + "endpointProperties");
         address.getEndpointProperties().forEach(property -> {
             if (property.getName() != null && property.getValue() != null) {
-                var name = property.getName().contains("://")
-                        ? property.getName()
-                        : EDC_NAMESPACE + property.getName();
-                add(target, name, property.getValue());
+                var endpointProperty = properties.addObject();
+                endpointProperty.put(JSON_LD_TYPE, EDC_NAMESPACE + "EndpointProperty");
+                add(endpointProperty, EDC_NAMESPACE + "name", property.getName());
+                add(endpointProperty, EDC_NAMESPACE + "value", property.getValue());
             }
         });
+        if (address.getEndpoint() != null && address.getEndpointProperties().stream()
+                .noneMatch(property -> EDC_NAMESPACE.concat("endpoint").equals(property.getName()))) {
+            var endpointProperty = properties.addObject();
+            endpointProperty.put(JSON_LD_TYPE, EDC_NAMESPACE + "EndpointProperty");
+            add(endpointProperty, EDC_NAMESPACE + "name", EDC_NAMESPACE + "endpoint");
+            add(endpointProperty, EDC_NAMESPACE + "value", address.getEndpoint());
+        }
     }
 
     private void addMap(ObjectNode json, String key, Map<String, Object> values, ObjectMapper mapper) {
@@ -305,18 +315,40 @@ public class DataPlaneSignalingClient {
     }
 
     private DspDataAddress toDspDataAddress(JsonNode node) {
+        var endpointType = node.get(EDC_NAMESPACE + "endpointType");
+        if (endpointType != null && endpointType.isObject()) {
+            endpointType = endpointType.get("@id");
+        }
         var builder = DspDataAddress.Builder.newInstance()
-                .endpointType(text(node, EDC_NAMESPACE + "type"))
-                .endpoint(text(node, EDC_NAMESPACE + "endpoint"));
+                .endpointType(endpointType == null || endpointType.isNull() ? null : endpointType.asText());
         var properties = node.get(EDC_NAMESPACE + "properties");
         if (properties != null && properties.isObject()) {
             addProperties(builder, properties);
+        }
+        var endpointProperties = node.get(EDC_NAMESPACE + "endpointProperties");
+        if (endpointProperties != null && endpointProperties.isArray()) {
+            endpointProperties.forEach(property -> {
+                var name = text(property, EDC_NAMESPACE + "name");
+                var value = property.get(EDC_NAMESPACE + "value");
+                if (name != null && value != null && value.isValueNode()) {
+                    builder.property(name, value.asText());
+                    if (EDC_NAMESPACE.concat("endpoint").equals(name)) {
+                        builder.endpoint(value.asText());
+                    }
+                }
+            });
+        }
+        var legacyEndpoint = node.get(EDC_NAMESPACE + "endpoint");
+        if (legacyEndpoint != null && legacyEndpoint.isValueNode()) {
+            builder.endpoint(legacyEndpoint.asText());
         }
         node.fields().forEachRemaining(entry -> {
             var key = entry.getKey();
             if (!JSON_LD_TYPE.equals(key) && !JSON_LD_CONTEXT.equals(key)
                     && !key.equals(EDC_NAMESPACE + "type")
                     && !key.equals(EDC_NAMESPACE + "endpoint")
+                    && !key.equals(EDC_NAMESPACE + "endpointType")
+                    && !key.equals(EDC_NAMESPACE + "endpointProperties")
                     && !key.equals(EDC_NAMESPACE + "properties")) {
                 addProperty(builder, key, entry.getValue());
             }
