@@ -51,6 +51,7 @@ public class DataPlaneSignalingClient {
 
     private static final MediaType TYPE_JSON = MediaType.parse("application/json");
     private static final String EDC_NAMESPACE = "https://w3id.org/edc/v0.0.1/ns/";
+    private static final String DSP_NAMESPACE = "https://w3id.org/dspace/2025/1/";
     private static final String JSON_LD_CONTEXT = "@context";
     private static final String JSON_LD_TYPE = "@type";
 
@@ -274,26 +275,28 @@ public class DataPlaneSignalingClient {
             return;
         }
         var target = json.putObject(key);
-        target.put(JSON_LD_TYPE, EDC_NAMESPACE + "DataAddress");
+        // EDC 0.18 uses EDC terms for the signaling envelope but DSP 2025-1
+        // terms for the nested data address.
+        target.put(JSON_LD_TYPE, DSP_NAMESPACE + "DataAddress");
         if (address.getEndpointType() != null) {
-            target.putObject(EDC_NAMESPACE + "endpointType")
+            target.putObject(DSP_NAMESPACE + "endpointType")
                     .put("@id", address.getEndpointType());
         }
-        var properties = target.putArray(EDC_NAMESPACE + "endpointProperties");
+        var properties = target.putArray(DSP_NAMESPACE + "endpointProperties");
         address.getEndpointProperties().forEach(property -> {
             if (property.getName() != null && property.getValue() != null) {
                 var endpointProperty = properties.addObject();
-                endpointProperty.put(JSON_LD_TYPE, EDC_NAMESPACE + "EndpointProperty");
-                add(endpointProperty, EDC_NAMESPACE + "name", property.getName());
-                add(endpointProperty, EDC_NAMESPACE + "value", property.getValue());
+                endpointProperty.put(JSON_LD_TYPE, DSP_NAMESPACE + "EndpointProperty");
+                add(endpointProperty, DSP_NAMESPACE + "name", property.getName());
+                add(endpointProperty, DSP_NAMESPACE + "value", property.getValue());
             }
         });
         if (address.getEndpoint() != null && address.getEndpointProperties().stream()
                 .noneMatch(property -> EDC_NAMESPACE.concat("endpoint").equals(property.getName()))) {
             var endpointProperty = properties.addObject();
-            endpointProperty.put(JSON_LD_TYPE, EDC_NAMESPACE + "EndpointProperty");
-            add(endpointProperty, EDC_NAMESPACE + "name", EDC_NAMESPACE + "endpoint");
-            add(endpointProperty, EDC_NAMESPACE + "value", address.getEndpoint());
+            endpointProperty.put(JSON_LD_TYPE, DSP_NAMESPACE + "EndpointProperty");
+            add(endpointProperty, DSP_NAMESPACE + "name", EDC_NAMESPACE + "endpoint");
+            add(endpointProperty, DSP_NAMESPACE + "value", address.getEndpoint());
         }
     }
 

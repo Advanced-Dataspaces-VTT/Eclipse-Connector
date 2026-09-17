@@ -154,8 +154,9 @@ class DataPlaneSignalingClientTest {
                     .withRequestBody(containing("\"s3-copy\""))
                     .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/flowType"))
                     .withRequestBody(containing("\"PULL\""))
-                    .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/endpointType"))
-                    .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/endpointProperties"))
+                    .withRequestBody(containing("https://w3id.org/dspace/2025/1/endpointType"))
+                    .withRequestBody(containing("https://w3id.org/dspace/2025/1/endpointProperties"))
+                    .withRequestBody(containing("https://w3id.org/dspace/2025/1/EndpointProperty"))
                     .withRequestBody(containing("destination-key")));
         }
 
