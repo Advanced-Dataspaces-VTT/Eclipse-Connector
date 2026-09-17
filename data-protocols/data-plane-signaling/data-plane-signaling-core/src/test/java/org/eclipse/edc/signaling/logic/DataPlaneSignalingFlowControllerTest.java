@@ -108,7 +108,10 @@ public class DataPlaneSignalingFlowControllerTest {
         void shouldCallPrepareOnDataPlane() {
             var dataPlaneInstance = dataPlaneInstanceBuilder().id("data-plane-id").build();
             Map<String, Object> claims = Map.of("key", "value");
-            var transferProcess = transferProcessBuilder().claims(claims).build();
+            var transferProcess = transferProcessBuilder()
+                    .claims(claims)
+                    .dataDestination(testDataAddress())
+                    .build();
             when(selectorService.selectFor(any())).thenReturn(ServiceResult.success(dataPlaneInstance));
             when(clientFactory.createClient(any())).thenReturn(dataPlaneClient);
             var flowResponseMessage = DataFlowStatusMessage.Builder.newInstance()
@@ -130,6 +133,7 @@ public class DataPlaneSignalingFlowControllerTest {
             assertThat(message.getClaims()).isSameAs(claims);
             assertThat(message.getParticipantId()).isEqualTo("consumer");
             assertThat(message.getCounterPartyId()).isEqualTo("provider");
+            assertThat(message.getDataAddress()).isNotNull();
 
         }
 

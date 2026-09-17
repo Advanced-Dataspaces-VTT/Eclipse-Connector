@@ -94,6 +94,15 @@ public class DataPlaneSignalingFlowController implements DataFlowController {
                 .profile(transferProcess.getTransferType())
                 .claims(transferProcess.getClaims());
 
+        var destination = transferProcess.getDataDestination();
+        if (destination != null) {
+            var destinationTransformation = typeTransformerRegistry.transform(destination, DspDataAddress.class);
+            if (destinationTransformation.failed()) {
+                return StatusResult.failure(FATAL_ERROR, destinationTransformation.getFailureDetail());
+            }
+            builder.dataAddress(destinationTransformation.getContent());
+        }
+
         var dataplaneMetadata = transferProcess.getDataplaneMetadata();
         if (dataplaneMetadata != null) {
             builder.labels(dataplaneMetadata.getLabels());

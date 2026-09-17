@@ -28,6 +28,7 @@ public final class DataFlowPrepareMessage {
     private String datasetId;
     private URI callbackAddress;
     private String profile;
+    private DspDataAddress dataAddress;
     private List<String> labels;
     private Map<String, Object> metadata;
     private Map<String, Object> claims;
@@ -69,6 +70,13 @@ public final class DataFlowPrepareMessage {
 
     public String getProfile() {
         return profile;
+    }
+
+    /**
+     * Consumer destination address used when the data plane provisions a flow.
+     */
+    public DspDataAddress getDataAddress() {
+        return dataAddress;
     }
 
     public List<String> getLabels() {
@@ -136,6 +144,11 @@ public final class DataFlowPrepareMessage {
 
         public Builder profile(String profile) {
             instance.profile = profile;
+            return this;
+        }
+
+        public Builder dataAddress(DspDataAddress dataAddress) {
+            instance.dataAddress = dataAddress;
             return this;
         }
 

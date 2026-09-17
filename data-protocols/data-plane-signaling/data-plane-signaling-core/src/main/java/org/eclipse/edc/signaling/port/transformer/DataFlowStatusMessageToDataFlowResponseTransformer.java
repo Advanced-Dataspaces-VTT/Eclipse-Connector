@@ -36,10 +36,12 @@ public class DataFlowStatusMessageToDataFlowResponseTransformer implements TypeT
 
     @Override
     public @Nullable DataFlowResponse transform(@NotNull DataFlowStatusMessage dataFlowStatusMessage, @NotNull TransformerContext context) {
-        return DataFlowResponse.Builder.newInstance()
-                .dataAddress(context.transform(dataFlowStatusMessage.getDataAddress(), DataAddress.class))
-                .async(dataFlowStatusMessage.getState().endsWith("ING"))
-                .build();
+        var builder = DataFlowResponse.Builder.newInstance()
+                .async(dataFlowStatusMessage.getState() != null && dataFlowStatusMessage.getState().endsWith("ING"));
+        if (dataFlowStatusMessage.getDataAddress() != null) {
+            builder.dataAddress(context.transform(dataFlowStatusMessage.getDataAddress(), DataAddress.class));
+        }
+        return builder.build();
     }
 
 }

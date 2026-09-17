@@ -122,6 +122,51 @@ class DataPlaneSignalingClientTest {
     class HandleResponse {
 
         @Test
+        void shouldSendStandardEdcJsonLdProvisionMessage() {
+            server.stubFor(post(urlPathEqualTo("/prepare")).willReturn(ok().withBody("""
+                    {
+                      "@type": "https://w3id.org/edc/v0.0.1/ns/DataFlowResponseMessage",
+                      "https://w3id.org/edc/v0.0.1/ns/provisioning": false
+                    }
+                    """)));
+            var client = createClient(dataPlane());
+            var message = DataFlowPrepareMessage.Builder.newInstance()
+                    .agreementId("agreement-id")
+                    .dataFlowId("process-id")
+                    .datasetId("asset-id")
+                    .participantId("participant-id")
+                    .profile("s3-copy")
+                    .build();
+
+            var result = client.prepare(message);
+
+            assertThat(result.succeeded()).isTrue();
+            server.verify(postRequestedFor(urlPathEqualTo("/prepare"))
+                    .withRequestBody(containing("\"@context\""))
+                    .withRequestBody(containing("DataFlowProvisionMessage"))
+                    .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/transferTypeDestination"))
+                    .withRequestBody(containing("\"s3-copy\""))
+                    .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/flowType"))
+                    .withRequestBody(containing("\"PULL\"")));
+        }
+
+        @Test
+        void shouldReadStandardEdcJsonLdResponse() {
+            server.stubFor(post(urlPathEqualTo("/prepare")).willReturn(ok().withBody("""
+                    {
+                      "@type": "https://w3id.org/edc/v0.0.1/ns/DataFlowResponseMessage",
+                      "https://w3id.org/edc/v0.0.1/ns/provisioning": false
+                    }
+                    """)));
+            var client = createClient(dataPlane());
+
+            var result = client.prepare(DataFlowPrepareMessage.Builder.newInstance().build());
+
+            assertThat(result.succeeded()).isTrue();
+            assertThat(result.getContent().getState()).isEqualTo("PROVISIONED");
+        }
+
+        @Test
         void shouldFail_whenDataPlaneRespondsWithErrorStatus() {
             server.stubFor(post(anyUrl()).willReturn(serverError()));
             var client = createClient(dataPlane());
@@ -151,7 +196,7 @@ class DataPlaneSignalingClientTest {
             var result = client.prepare(DataFlowPrepareMessage.Builder.newInstance().build());
 
             assertThat(result.failed()).isTrue();
-            assertThat(result.getFailureMessages()).first().asString().contains("Cannot read response body");
+            assertThat(result.getFailureMessages()).first().asString().contains("Cannot parse data-plane response");
         }
     }
 
