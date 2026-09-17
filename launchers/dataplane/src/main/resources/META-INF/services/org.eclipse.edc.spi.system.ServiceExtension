@@ -1,0 +1,3 @@
+org.eclipse.edc.participantcontext.connector.DataplaneSingleParticipantContextExtension
+org.eclipse.edc.connector.dataplane.auth.StaticControlPlaneAuthenticationExtension
+org.eclipse.edc.connector.dataplane.selector.PutDataPlaneSelectorExtension

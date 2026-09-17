@@ -51,15 +51,30 @@ public class ClassicParticipantContextDefaultServicesExtension implements Servic
 
     @Provider(isDefault = true)
     public SingleParticipantContextSupplier participantContextSupplier(ServiceExtensionContext context) {
-        var configuredParticipantId = context.getConfig().getString("edc.participant.id", participantId);
-        var configuredContextId = context.getConfig().getString("edc.participant.context.id", participantContextId);
+        var configuredParticipantId = configuredValue(context, "edc.participant.id", participantId);
+        var configuredContextId = configuredValue(context, "edc.participant.context.id", participantContextId);
         var contextId = configuredContextId != null ? configuredContextId : configuredParticipantId;
         if (configuredParticipantId == null || contextId == null) {
             throw new IllegalStateException("Both edc.participant.id and edc.participant.context.id must be configured");
         }
-        var participantContext = ParticipantContext.Builder.newInstance().id(contextId)
-                .identity(configuredParticipantId).build();
+        var participantContextBuilder = ParticipantContext.Builder.newInstance();
+        // The local source and published 0.18 runtime expose different
+        // descriptors for this inherited builder method. Reflection avoids
+        // linking against either covariant return type.
+        try {
+            participantContextBuilder.getClass()
+                    .getMethod("participantContextId", String.class)
+                    .invoke(participantContextBuilder, contextId);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("ParticipantContext builder does not support participantContextId", e);
+        }
+        var participantContext = participantContextBuilder.identity(configuredParticipantId).build();
         return () -> ServiceResult.success(participantContext);
+    }
+
+    private String configuredValue(ServiceExtensionContext context, String key, String defaultValue) {
+        var value = context.getConfig().getString(key, defaultValue);
+        return value != null ? value : System.getProperty(key, defaultValue);
     }
 
 
@@ -79,8 +94,8 @@ public class ClassicParticipantContextDefaultServicesExtension implements Servic
         // Keep this compatible with runtimes assembled from published 0.18
         // dataplane modules: explicitly resolve the values from the merged
         // configuration instead of relying only on field setting injection.
-        participantId = context.getConfig().getString("edc.participant.id", participantId);
-        participantContextId = context.getConfig().getString("edc.participant.context.id", participantContextId);
+        participantId = configuredValue(context, "edc.participant.id", participantId);
+        participantContextId = configuredValue(context, "edc.participant.context.id", participantContextId);
 
         if (participantId == null || participantContextId == null) {
             throw new IllegalStateException("Both edc.participant.id and edc.participant.context.id must be configured");

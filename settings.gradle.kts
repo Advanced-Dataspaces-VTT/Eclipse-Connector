@@ -233,6 +233,10 @@ include(":spi:control-plane-spi")
 include(":spi:decentralized-claims-spi")
 include(":core:common:junit-base")
 
+// DIL connector distribution ----------------------------------------------------------------------
+include(":launchers:controlplane")
+include(":launchers:dataplane")
+
 
 // modules for system tests ------------------------------------------------------------------------
 include(":system-tests:bom-tests")

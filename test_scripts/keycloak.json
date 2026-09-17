@@ -1,0 +1,8 @@
+{
+  "base_url": "https://dil.collab-cloud.eu/auth",
+  "realm": "gx-participant1",
+  "client_id": "management-api",
+  "client_secret": "dNl4aKm0aWYCxOnw2hAs6gwadxeffTRV",
+  "scope": "openid management-api:catalog:read",
+  "timeout_seconds": 30
+}

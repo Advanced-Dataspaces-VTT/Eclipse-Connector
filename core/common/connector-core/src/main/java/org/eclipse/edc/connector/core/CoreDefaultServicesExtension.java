@@ -14,6 +14,7 @@
 
 package org.eclipse.edc.connector.core;
 
+import org.eclipse.edc.api.auth.spi.ControlClientAuthenticationProvider;
 import org.eclipse.edc.connector.core.profile.DataspaceProfileContextRegistryImpl;
 import org.eclipse.edc.participant.spi.NoOpParticipantIdMapper;
 import org.eclipse.edc.participant.spi.ParticipantIdMapper;
@@ -21,6 +22,8 @@ import org.eclipse.edc.protocol.spi.DataspaceProfileContextRegistry;
 import org.eclipse.edc.runtime.metamodel.annotation.Extension;
 import org.eclipse.edc.runtime.metamodel.annotation.Provider;
 import org.eclipse.edc.spi.system.ServiceExtension;
+
+import java.util.Collections;
 
 /**
  * Provides default service implementations for fallback
@@ -33,6 +36,11 @@ public class CoreDefaultServicesExtension implements ServiceExtension {
     @Override
     public String name() {
         return NAME;
+    }
+
+    @Provider(isDefault = true)
+    public ControlClientAuthenticationProvider controlClientAuthenticationProvider() {
+        return Collections::emptyMap;
     }
 
     @Provider(isDefault = true)

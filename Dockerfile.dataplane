@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1
+
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /workspace
+
+COPY . .
+RUN ./gradlew --no-daemon :launchers:dataplane:verifyServiceDescriptors
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+
+RUN addgroup --system edc && adduser --system --ingroup edc edc
+COPY --from=build /workspace/launchers/dataplane/build/libs/dataplane.jar /app/dataplane.jar
+
+USER edc
+ENV EDC_FS_CONFIG=/app/configuration.properties
+EXPOSE 8080 8083 11001
+ENTRYPOINT ["java", "-jar", "/app/dataplane.jar"]

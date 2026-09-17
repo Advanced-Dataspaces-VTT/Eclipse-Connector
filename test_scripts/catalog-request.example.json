@@ -1,0 +1,16 @@
+{
+  "management_url": "https://connector.gx-participant1.dil.collab-cloud.eu/api/management",
+  "participant_context_id": "did:web:gx-participant1.dil.collab-cloud.eu:identity",
+  "remote_url": "https://dil-connector.material.dil.collab-cloud.eu/api/dsp",
+  "remote_did": "did:web:dil-connector.material.dil.collab-cloud.eu:identity",
+  "profile": "http-dsp-profile-2025-1",
+  "additional_scopes": [
+    "org.eclipse.dspace.dcp.vc.type:MembershipCredential:read"
+  ],
+  "context": "https://w3id.org/dspace/2025/1/context.jsonld",
+  "authorization": {
+    "bearer_token": "REPLACE_WITH_KEYCLOAK_ACCESS_TOKEN"
+  },
+  "timeout_seconds": 30,
+  "insecure_tls": false
+}

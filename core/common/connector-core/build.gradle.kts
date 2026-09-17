@@ -21,11 +21,15 @@ dependencies {
     api(project(":spi:control-plane-spi"))
     api(project(":core:common:security-core"))
 
+    // Interfaces used by the embedded EDC 0.18 dataplane services.
+    implementation("org.eclipse.edc:auth-spi:0.18.0")
+    implementation("org.eclipse.edc:http-lib:0.18.0")
+    implementation("org.eclipse.edc:http-spi:0.18.0")
+    implementation("org.eclipse.edc:validator-spi:0.18.0")
+
     implementation(project(":core:common:lib:core-lib"))
     implementation(project(":core:control-plane:lib:control-plane-lib"))
 
     testImplementation(project(":core:common:junit"))
     testImplementation(libs.awaitility)
 }
-
-

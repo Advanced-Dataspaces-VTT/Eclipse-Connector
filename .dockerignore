@@ -1,0 +1,12 @@
+.git
+.gradle
+**/build
+**/.idea
+**/.vscode
+secrets
+**/secrets
+*.jks
+*.p12
+*.pfx
+*.pem
+*.key
