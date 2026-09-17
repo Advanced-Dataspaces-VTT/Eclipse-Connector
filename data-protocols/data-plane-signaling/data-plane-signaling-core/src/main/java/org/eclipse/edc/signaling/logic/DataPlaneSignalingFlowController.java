@@ -35,6 +35,7 @@ import org.eclipse.edc.signaling.port.ClientFactory;
 import org.eclipse.edc.spi.response.StatusResult;
 import org.eclipse.edc.spi.result.Result;
 import org.eclipse.edc.spi.result.ServiceResult;
+import org.eclipse.edc.spi.types.domain.DataAddress;
 import org.eclipse.edc.transform.spi.TypeTransformerRegistry;
 import org.jetbrains.annotations.NotNull;
 
@@ -60,15 +61,24 @@ public class DataPlaneSignalingFlowController implements DataFlowController {
     private final ClientFactory clientFactory;
     private final DataAddressStore dataAddressStore;
     private final AssetIndex assetIndex;
+    private final boolean legacyDataplaneCompatibility;
 
     public DataPlaneSignalingFlowController(DataPlaneSelectorService selectorClient,
                                             TypeTransformerRegistry typeTransformerRegistry, ClientFactory clientFactory,
                                             DataAddressStore dataAddressStore, AssetIndex assetIndex) {
+        this(selectorClient, typeTransformerRegistry, clientFactory, dataAddressStore, assetIndex, false);
+    }
+
+    public DataPlaneSignalingFlowController(DataPlaneSelectorService selectorClient,
+                                            TypeTransformerRegistry typeTransformerRegistry, ClientFactory clientFactory,
+                                            DataAddressStore dataAddressStore, AssetIndex assetIndex,
+                                            boolean legacyDataplaneCompatibility) {
         this.selectorClient = selectorClient;
         this.typeTransformerRegistry = typeTransformerRegistry;
         this.clientFactory = clientFactory;
         this.dataAddressStore = dataAddressStore;
         this.assetIndex = assetIndex;
+        this.legacyDataplaneCompatibility = legacyDataplaneCompatibility;
     }
 
     @Override
@@ -239,19 +249,41 @@ public class DataPlaneSignalingFlowController implements DataFlowController {
                 .flatMap(this::toStatusResult)
                 .map(clientFactory::createClient)
                 .compose(client -> {
-                    var builder = DataFlowStartedNotificationMessage.Builder.newInstance()
-                            .messageId(UUID.randomUUID().toString());
                     var dataAddress = transferProcess.getContentDataAddress();
-                    if (dataAddress != null) {
-                        var dspDataAddressTransformation = typeTransformerRegistry.transform(dataAddress, DspDataAddress.class);
-                        if (dspDataAddressTransformation.failed()) {
-                            return StatusResult.failure(FATAL_ERROR, dspDataAddressTransformation.getFailureDetail());
-                        }
-                        builder.dataAddress(dspDataAddressTransformation.getContent());
+                    var dspDataAddress = toDspDataAddress(dataAddress);
+                    if (dspDataAddress.failed()) {
+                        return StatusResult.failure(FATAL_ERROR, dspDataAddress.getFailureDetail());
                     }
 
+                    if (legacyDataplaneCompatibility) {
+                        // EDC 0.18 has no /started notification endpoint. Its
+                        // /start endpoint requires the complete flow message,
+                        // including the process id and source data address.
+                        var message = DataFlowStartMessage.Builder.newInstance()
+                                .dataFlowId(transferProcess.getId())
+                                .agreementId(transferProcess.getContractId())
+                                .datasetId(transferProcess.getAssetId())
+                                .dataspaceContext(transferProcess.getProtocol())
+                                .profile(transferProcess.getTransferType())
+                                .dataAddress(dspDataAddress.getContent())
+                                .build();
+                        return client.start(message).map(response -> (Void) null);
+                    }
+
+                    var builder = DataFlowStartedNotificationMessage.Builder.newInstance()
+                            .messageId(UUID.randomUUID().toString());
+                    if (dspDataAddress.getContent() != null) {
+                        builder.dataAddress(dspDataAddress.getContent());
+                    }
                     return client.started(transferProcess.getId(), builder.build());
                 });
+    }
+
+    private Result<DspDataAddress> toDspDataAddress(DataAddress dataAddress) {
+        if (dataAddress == null) {
+            return Result.success(null);
+        }
+        return typeTransformerRegistry.transform(dataAddress, DspDataAddress.class);
     }
 
     @Override
@@ -264,7 +296,10 @@ public class DataPlaneSignalingFlowController implements DataFlowController {
         return selectorClient.findById(transferProcess.getDataPlaneId())
                 .flatMap(this::toStatusResult)
                 .map(clientFactory::createClient)
-                .compose(client -> client.completed(transferProcess.getId()));
+                .compose(client -> legacyDataplaneCompatibility
+                        ? client.terminate(transferProcess.getId(), DataFlowTerminateMessage.Builder.newInstance()
+                        .messageId(UUID.randomUUID().toString()).build())
+                        : client.completed(transferProcess.getId()));
     }
 
     @Override

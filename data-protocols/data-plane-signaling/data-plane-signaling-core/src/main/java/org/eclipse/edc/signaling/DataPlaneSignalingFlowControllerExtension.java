@@ -22,6 +22,7 @@ import org.eclipse.edc.runtime.metamodel.annotation.Configuration;
 import org.eclipse.edc.runtime.metamodel.annotation.Extension;
 import org.eclipse.edc.runtime.metamodel.annotation.Inject;
 import org.eclipse.edc.runtime.metamodel.annotation.Provider;
+import org.eclipse.edc.runtime.metamodel.annotation.Setting;
 import org.eclipse.edc.signaling.logic.DataPlaneSignalingFlowController;
 import org.eclipse.edc.signaling.port.ClientFactory;
 import org.eclipse.edc.signaling.port.transformer.DataAddressToDspDataAddressTransformer;
@@ -40,6 +41,13 @@ public class DataPlaneSignalingFlowControllerExtension implements ServiceExtensi
 
     @Configuration
     private SignalingApiConfiguration apiConfiguration;
+
+    @Setting(
+            key = "edc.dataplane.signaling.legacy.compatibility.enabled",
+            description = "Use the EDC 0.18 dataplane start and terminate endpoints",
+            defaultValue = "false"
+    )
+    private boolean legacyDataplaneCompatibility;
 
     @Inject
     private TypeTransformerRegistry transformerRegistry;
@@ -64,6 +72,7 @@ public class DataPlaneSignalingFlowControllerExtension implements ServiceExtensi
         typeTransformerRegistry.register(new DataFlowStatusMessageToDataFlowResponseTransformer());
         typeTransformerRegistry.register(new DspDataAddressToDataAddressTransformer());
         return new DataPlaneSignalingFlowController(dataPlaneSelectorService,
-                typeTransformerRegistry, clientFactory, dataAddressStore, assetIndex);
+                typeTransformerRegistry, clientFactory, dataAddressStore, assetIndex,
+                legacyDataplaneCompatibility);
     }
 }
