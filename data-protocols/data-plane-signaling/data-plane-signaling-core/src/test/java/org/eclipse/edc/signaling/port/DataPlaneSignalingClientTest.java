@@ -20,6 +20,7 @@ import org.eclipse.edc.connector.controlplane.dataplane.spi.instance.Authorizati
 import org.eclipse.edc.connector.controlplane.dataplane.spi.instance.DataPlaneInstance;
 import org.eclipse.edc.json.JacksonTypeManager;
 import org.eclipse.edc.signaling.domain.DataFlowPrepareMessage;
+import org.eclipse.edc.signaling.domain.DataFlowStartMessage;
 import org.eclipse.edc.signaling.domain.DataFlowTerminateMessage;
 import org.eclipse.edc.signaling.domain.DspDataAddress;
 import org.eclipse.edc.signaling.spi.authorization.Header;
@@ -148,7 +149,6 @@ class DataPlaneSignalingClientTest {
 
             assertThat(result.succeeded()).isTrue();
             server.verify(postRequestedFor(urlPathEqualTo("/prepare"))
-                    .withRequestBody(containing("\"@context\""))
                     .withRequestBody(containing("DataFlowProvisionMessage"))
                     .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/transferTypeDestination"))
                     .withRequestBody(containing("\"s3-copy\""))
@@ -158,6 +158,33 @@ class DataPlaneSignalingClientTest {
                     .withRequestBody(containing("https://w3id.org/dspace/2025/1/endpointProperties"))
                     .withRequestBody(containing("https://w3id.org/dspace/2025/1/EndpointProperty"))
                     .withRequestBody(containing("destination-key")));
+        }
+
+        @Test
+        void shouldSendCanonicalEdc018StartMessageWithSourceAddress() {
+            server.stubFor(post(urlPathEqualTo("/start")).willReturn(ok().withBody("{}")));
+            var client = createClient(dataPlane());
+            var message = DataFlowStartMessage.Builder.newInstance()
+                    .agreementId("agreement-id")
+                    .dataFlowId("process-id")
+                    .datasetId("asset-id")
+                    .profile("s3-copy")
+                    .dataAddress(DspDataAddress.Builder.newInstance()
+                            .endpointType("AmazonS3")
+                            .property("bucketName", "destination-bucket")
+                            .property("keyName", "destination-key")
+                            .build())
+                    .build();
+
+            var result = client.start(message);
+
+            assertThat(result.succeeded()).isTrue();
+            server.verify(postRequestedFor(urlPathEqualTo("/start"))
+                    .withRequestBody(containing("https://w3id.org/edc/v0.0.1/ns/sourceDataAddress"))
+                    .withRequestBody(containing("https://w3id.org/dspace/2025/1/DataAddress"))
+                    .withRequestBody(containing("https://w3id.org/dspace/2025/1/endpointType"))
+                    .withRequestBody(containing("AmazonS3"))
+                    .withRequestBody(containing("https://w3id.org/dspace/2025/1/endpointProperties")));
         }
 
         @Test

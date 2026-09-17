@@ -54,7 +54,7 @@ public class DataPlaneSignalingExtension implements ServiceExtension {
 
     @Provider
     public ClientFactory clientFactory() {
-        return new ClientFactory(httpClient, () -> typeManager.getMapper(JSON_LD), signalingAuthorizationRegistry);
+        return new ClientFactory(httpClient, () -> typeManager.getMapper(JSON_LD), signalingAuthorizationRegistry, monitor);
     }
 
     @Override

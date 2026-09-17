@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.edc.connector.controlplane.dataplane.spi.instance.DataPlaneInstance;
 import org.eclipse.edc.http.spi.EdcHttpClient;
 import org.eclipse.edc.signaling.spi.authorization.SignalingAuthorizationRegistry;
+import org.eclipse.edc.spi.monitor.Monitor;
 
 import java.util.function.Supplier;
 
@@ -26,14 +27,20 @@ public class ClientFactory {
     private final EdcHttpClient httpClient;
     private final Supplier<ObjectMapper> objectMapperSupplier;
     private final SignalingAuthorizationRegistry signalingAuthorizationRegistry;
+    private final Monitor monitor;
 
     public ClientFactory(EdcHttpClient httpClient, Supplier<ObjectMapper> objectMapperSupplier, SignalingAuthorizationRegistry signalingAuthorizationRegistry) {
+        this(httpClient, objectMapperSupplier, signalingAuthorizationRegistry, null);
+    }
+
+    public ClientFactory(EdcHttpClient httpClient, Supplier<ObjectMapper> objectMapperSupplier, SignalingAuthorizationRegistry signalingAuthorizationRegistry, Monitor monitor) {
         this.httpClient = httpClient;
         this.objectMapperSupplier = objectMapperSupplier;
         this.signalingAuthorizationRegistry = signalingAuthorizationRegistry;
+        this.monitor = monitor;
     }
 
     public DataPlaneSignalingClient createClient(DataPlaneInstance instance) {
-        return new DataPlaneSignalingClient(instance, httpClient, objectMapperSupplier, signalingAuthorizationRegistry);
+        return new DataPlaneSignalingClient(instance, httpClient, objectMapperSupplier, signalingAuthorizationRegistry, monitor);
     }
 }

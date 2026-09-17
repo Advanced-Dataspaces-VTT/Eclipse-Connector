@@ -33,6 +33,7 @@ import org.eclipse.edc.signaling.domain.DataFlowSuspendMessage;
 import org.eclipse.edc.signaling.domain.DataFlowTerminateMessage;
 import org.eclipse.edc.signaling.domain.DspDataAddress;
 import org.eclipse.edc.signaling.spi.authorization.SignalingAuthorizationRegistry;
+import org.eclipse.edc.spi.monitor.Monitor;
 import org.eclipse.edc.spi.response.StatusResult;
 import org.eclipse.edc.spi.result.Result;
 
@@ -59,14 +60,23 @@ public class DataPlaneSignalingClient {
     private final EdcHttpClient httpClient;
     private final Supplier<ObjectMapper> objectMapperSupplier;
     private final SignalingAuthorizationRegistry authorizationRegistry;
+    private final Monitor monitor;
 
     public DataPlaneSignalingClient(DataPlaneInstance dataPlane, EdcHttpClient httpClient,
                                     Supplier<ObjectMapper> objectMapperSupplier,
                                     SignalingAuthorizationRegistry authorizationRegistry) {
+        this(dataPlane, httpClient, objectMapperSupplier, authorizationRegistry, null);
+    }
+
+    public DataPlaneSignalingClient(DataPlaneInstance dataPlane, EdcHttpClient httpClient,
+                                    Supplier<ObjectMapper> objectMapperSupplier,
+                                    SignalingAuthorizationRegistry authorizationRegistry,
+                                    Monitor monitor) {
         this.dataPlane = dataPlane;
         this.httpClient = httpClient;
         this.objectMapperSupplier = objectMapperSupplier;
         this.authorizationRegistry = authorizationRegistry;
+        this.monitor = monitor;
     }
 
     public StatusResult<DataFlowStatusMessage> prepare(DataFlowPrepareMessage request) {
@@ -98,13 +108,31 @@ public class DataPlaneSignalingClient {
     }
 
     private <T> StatusResult<T> send(String path, Object message, Function<ResponseBody, Result<T>> extractBody) {
-        return createRequestBuilder(message, dataPlane.getUrl() + "/" + path)
-                .compose(builder -> {
-                    var response = httpClient.execute(builder.build(), r -> handleResponse(r, extractBody));
-                    if (response.succeeded()) {
-                        return StatusResult.success(response.getContent());
+        var url = dataPlane.getUrl() + "/" + path;
+        return createRequestBuilder(message, url)
+                .compose(builder -> execute(builder, extractBody));
+    }
+
+    private <T> StatusResult<T> execute(Request.Builder builder, Function<ResponseBody, Result<T>> extractBody) {
+        var response = httpClient.execute(builder.build(), r -> handleResponse(r, extractBody));
+        if (response.succeeded()) {
+            return StatusResult.success(response.getContent());
+        } else {
+            return StatusResult.fatalError(response.getFailureDetail());
+        }
+    }
+
+    private StatusResult<Request.Builder> createRequestBuilder(Object message, String url) {
+        return this.serialize(message)
+                .onSuccess(body -> logOutbound(url, body))
+                .map(rawBody -> RequestBody.create(rawBody, TYPE_JSON))
+                .map(body -> new Request.Builder().post(body).url(url))
+                .compose(this::setupAuthorization)
+                .flatMap(it -> {
+                    if (it.succeeded()) {
+                        return StatusResult.success(it.getContent());
                     } else {
-                        return StatusResult.fatalError(response.getFailureDetail());
+                        return StatusResult.failure(FATAL_ERROR, it.getFailureDetail());
                     }
                 });
     }
@@ -161,20 +189,6 @@ public class DataPlaneSignalingClient {
         }
     }
 
-    private StatusResult<Request.Builder> createRequestBuilder(Object message, String url) {
-        return this.serialize(message)
-                .map(rawBody -> RequestBody.create(rawBody, TYPE_JSON))
-                .map(body -> new Request.Builder().post(body).url(url))
-                .compose(this::setupAuthorization)
-                .flatMap(it -> {
-                    if (it.succeeded()) {
-                        return StatusResult.success(it.getContent());
-                    } else {
-                        return StatusResult.failure(FATAL_ERROR, it.getFailureDetail());
-                    }
-                });
-    }
-
     private Result<Request.Builder> setupAuthorization(Request.Builder requestBuilder) {
         var authorizationProfile = dataPlane.getAuthorizationProfile();
         if (authorizationProfile == null) {
@@ -207,8 +221,6 @@ public class DataPlaneSignalingClient {
      */
     private ObjectNode toStandardMessage(Object message, ObjectMapper mapper) {
         var json = mapper.createObjectNode();
-        var context = json.putObject(JSON_LD_CONTEXT);
-        context.put("@vocab", EDC_NAMESPACE);
 
         if (message instanceof DataFlowPrepareMessage prepare) {
             json.put(JSON_LD_TYPE, EDC_NAMESPACE + "DataFlowProvisionMessage");
@@ -275,8 +287,9 @@ public class DataPlaneSignalingClient {
             return;
         }
         var target = json.putObject(key);
-        // EDC 0.18 uses EDC terms for the signaling envelope but DSP 2025-1
-        // terms for the nested data address.
+        // This is the shape emitted by EDC 0.18's
+        // JsonObjectFromDataAddressDspaceTransformer: the envelope uses EDC
+        // terms, while the nested address uses DSP 2025-1 terms.
         target.put(JSON_LD_TYPE, DSP_NAMESPACE + "DataAddress");
         if (address.getEndpointType() != null) {
             target.putObject(DSP_NAMESPACE + "endpointType")
@@ -309,6 +322,37 @@ public class DataPlaneSignalingClient {
     private void add(ObjectNode json, String key, String value) {
         if (value != null) {
             json.put(key, value);
+        }
+    }
+
+    private void logOutbound(String url, String body) {
+        if (monitor == null) {
+            return;
+        }
+        try {
+            var mapper = objectMapperSupplier.get();
+            var redacted = mapper.readTree(body);
+            redactSecrets(redacted);
+            monitor.debug("Data-plane signaling outbound POST %s payload=%s".formatted(url, redacted));
+        } catch (IOException e) {
+            monitor.debug("Data-plane signaling outbound POST %s payload could not be logged: %s".formatted(url, e.getMessage()));
+        }
+    }
+
+    private void redactSecrets(JsonNode node) {
+        if (node.isObject()) {
+            var object = (ObjectNode) node;
+            object.fields().forEachRemaining(entry -> {
+                var name = entry.getKey().toLowerCase();
+                if (name.contains("secret") || name.contains("password") || name.contains("token")
+                        || name.contains("accesskey")) {
+                    object.put(entry.getKey(), "<redacted>");
+                } else {
+                    redactSecrets(entry.getValue());
+                }
+            });
+        } else if (node.isArray()) {
+            node.forEach(this::redactSecrets);
         }
     }
 
