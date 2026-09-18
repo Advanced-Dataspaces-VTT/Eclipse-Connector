@@ -61,26 +61,50 @@ public class PutDataPlaneSelectorExtension implements ServiceExtension {
     )
     private String compatibilityTransferTypes;
 
+    @Setting(key = "edc.dpf.compatibility.authorization.type", defaultValue = "oauth2_client_credentials")
+    private String compatibilityAuthorizationType;
+
+    @Setting(key = "edc.dpf.compatibility.authorization.token.endpoint", required = false)
+    private String compatibilityTokenEndpoint;
+
+    @Setting(key = "edc.dpf.compatibility.authorization.client.id", required = false)
+    private String compatibilityClientId;
+
+    @Setting(key = "edc.dpf.compatibility.authorization.client.secret", required = false)
+    private String compatibilityClientSecret;
+
     @Inject
     private ControlApiHttpClient httpClient;
 
     @Provider
     public DataPlaneSelectorService dataPlaneSelectorService() {
-        return new PutDataPlaneSelectorService(httpClient, selectorApiUrl, compatibilityTransferTypes);
+        return new PutDataPlaneSelectorService(httpClient, selectorApiUrl, compatibilityTransferTypes,
+                compatibilityAuthorizationType, compatibilityTokenEndpoint, compatibilityClientId,
+                compatibilityClientSecret);
     }
 
     private static final class PutDataPlaneSelectorService implements DataPlaneSelectorService {
         private final ControlApiHttpClient httpClient;
         private final String selectorApiUrl;
         private final Set<String> compatibilityTransferTypes;
+        private final String compatibilityAuthorizationType;
+        private final String compatibilityTokenEndpoint;
+        private final String compatibilityClientId;
+        private final String compatibilityClientSecret;
 
-        private PutDataPlaneSelectorService(ControlApiHttpClient httpClient, String selectorApiUrl, String compatibilityTransferTypes) {
+        private PutDataPlaneSelectorService(ControlApiHttpClient httpClient, String selectorApiUrl, String compatibilityTransferTypes,
+                                            String compatibilityAuthorizationType, String compatibilityTokenEndpoint,
+                                            String compatibilityClientId, String compatibilityClientSecret) {
             this.httpClient = httpClient;
             this.selectorApiUrl = selectorApiUrl;
             this.compatibilityTransferTypes = Arrays.stream(compatibilityTransferTypes.split(","))
                     .map(String::trim)
                     .filter(value -> !value.isEmpty())
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            this.compatibilityAuthorizationType = compatibilityAuthorizationType;
+            this.compatibilityTokenEndpoint = compatibilityTokenEndpoint;
+            this.compatibilityClientId = compatibilityClientId;
+            this.compatibilityClientSecret = compatibilityClientSecret;
         }
 
         @Override
@@ -142,12 +166,27 @@ public class PutDataPlaneSelectorExtension implements ServiceExtension {
                     .add("labels", strings(instance.getLabels()));
 
             var authorization = authorization(instance.getAuthorizationProfile());
+            if (authorization == null) {
+                authorization = configuredAuthorization();
+            }
             if (authorization != null) {
                 builder.add("authorization", authorization);
             } else {
                 builder.add("authorization", NULL);
             }
             return builder.build();
+        }
+
+        private JsonObject configuredAuthorization() {
+            if (compatibilityTokenEndpoint == null || compatibilityClientId == null || compatibilityClientSecret == null) {
+                return null;
+            }
+            return Json.createObjectBuilder()
+                    .add("type", compatibilityAuthorizationType)
+                    .add("tokenEndpoint", compatibilityTokenEndpoint)
+                    .add("clientId", compatibilityClientId)
+                    .add("clientSecret", compatibilityClientSecret)
+                    .build();
         }
 
         private static JsonArrayBuilder strings(Iterable<String> values) {

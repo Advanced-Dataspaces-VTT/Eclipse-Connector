@@ -35,7 +35,6 @@ dependencies {
     // DataPlaneRegistrationMessage over PUT, so the launcher provides the
     // compatible client implementation below.
     implementation("org.eclipse.edc:data-plane-selector-spi:0.18.0")
-    implementation("org.eclipse.edc:data-plane-signaling-api:0.18.0")
     implementation("org.eclipse.edc:data-plane-signaling-client:0.18.0")
     implementation("org.eclipse.edc:data-plane-store-sql:0.18.0")
     implementation("org.eclipse.edc:sql-core:0.18.0")
@@ -45,6 +44,12 @@ dependencies {
     implementation("org.eclipse.edc:validator-data-address-http-data:0.18.0")
     implementation("org.eclipse.edc.aws:data-plane-aws-s3:0.18.0")
     implementation("org.eclipse.edc.aws:validator-data-address-s3:0.18.0")
+    implementation("software.amazon.awssdk:s3:2.46.13")
+    // Native Data Plane Signaling SDK. The old EDC signaling API is excluded
+    // above because it exposes the same /v1/dataflows routes and expects the
+    // legacy EDR model.
+    implementation(libs.dataplane.sdk.core)
+    implementation(libs.dataplane.sdk.jakarta.ee)
     implementation("org.eclipse.edc:vault-hashicorp:0.18.0")
 
     runtimeOnly(libs.postgres)

@@ -2,3 +2,4 @@ org.eclipse.edc.participantcontext.connector.DataplaneSingleParticipantContextEx
 org.eclipse.edc.connector.dataplane.auth.StaticControlPlaneAuthenticationExtension
 org.eclipse.edc.connector.dataplane.selector.PutDataPlaneSelectorExtension
 org.eclipse.edc.connector.dataplane.compat.DataPlaneSourceAddressCompatibilityExtension
+org.eclipse.edc.connector.dataplane.s3.NativeS3DataPlaneExtension
