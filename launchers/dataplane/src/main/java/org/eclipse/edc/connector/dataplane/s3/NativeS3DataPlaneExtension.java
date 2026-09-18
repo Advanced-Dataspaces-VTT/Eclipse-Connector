@@ -67,6 +67,9 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
     @Setting(key = "edc.control.endpoint", defaultValue = "http://localhost:8083/api/control")
     private String controlEndpoint;
 
+    @Setting(key = "edc.dataplane.endpoint", defaultValue = "http://localhost:8083/v1/dataflows")
+    private String dataplaneEndpoint;
+
     @Setting(key = "edc.dpf.compatibility.authorization.type", defaultValue = OAUTH2_CLIENT_CREDENTIALS)
     private String authorizationType;
 
@@ -103,7 +106,7 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
         var authorization = authorizationProfile();
         var builder = Dataplane.newInstance()
                 .id(dataplaneId)
-                .endpoint(URI.create(controlEndpoint + "/v1/dataflows"))
+                .endpoint(URI.create(dataplaneEndpoint))
                 .authorizationProfile(authorization)
                 .registerAuthorization(new NativeOauth2ClientCredentialsAuthorization())
                 .profile("s3-copy-PULL")
