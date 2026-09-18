@@ -67,7 +67,10 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
     @Setting(key = "edc.control.endpoint", defaultValue = "http://localhost:8083/api/control")
     private String controlEndpoint;
 
-    @Setting(key = "edc.dataplane.endpoint", defaultValue = "http://localhost:8083/v1/dataflows")
+    // The native SDK controller is registered in the default web context.
+    // In the GX deployment that context is /api on port 8080; port 8083 is
+    // reserved for the legacy EDC control context.
+    @Setting(key = "edc.dataplane.endpoint", defaultValue = "http://localhost:8080/api/v1/dataflows")
     private String dataplaneEndpoint;
 
     @Setting(key = "edc.dpf.compatibility.authorization.type", defaultValue = OAUTH2_CLIENT_CREDENTIALS)
