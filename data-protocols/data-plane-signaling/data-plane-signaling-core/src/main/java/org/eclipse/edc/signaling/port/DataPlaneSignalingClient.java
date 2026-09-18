@@ -241,7 +241,11 @@ public class DataPlaneSignalingClient {
             add(json, "dataFlowId", prepare.getDataFlowId());
             add(json, "agreementId", prepare.getAgreementId());
             add(json, "datasetId", prepare.getDatasetId());
-            add(json, "profile", prepare.getProfile());
+            // The standalone SDK derives the flow direction from the last
+            // profile token, while EDC/DSP carries the negotiated transfer
+            // type as e.g. "s3-copy". Keep this adaptation local to the
+            // SDK boundary so the DSP/control-plane value remains unchanged.
+            add(json, "profile", nativePullProfile(prepare.getProfile()));
             add(json, "labels", prepare.getLabels(), mapper);
             add(json, "claims", prepare.getClaims(), mapper);
 
@@ -288,6 +292,14 @@ public class DataPlaneSignalingClient {
             throw new IllegalArgumentException("Unsupported data-plane message: " + message.getClass().getName());
         }
         return json;
+    }
+
+    private String nativePullProfile(String profile) {
+        if (profile == null || profile.isBlank()
+                || profile.endsWith("-PULL") || profile.endsWith("-PUSH")) {
+            return profile;
+        }
+        return profile + "-PULL";
     }
 
     private static final String NATIVE_DESTINATION_METADATA = "__edc_destination";

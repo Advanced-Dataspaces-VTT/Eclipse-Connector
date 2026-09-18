@@ -188,6 +188,28 @@ class DataPlaneSignalingClientTest {
         }
 
         @Test
+        void shouldAdaptNativeSdkProfileToPull() {
+            server.stubFor(post(urlPathEqualTo("/api/v1/dataflows/prepare"))
+                    .willReturn(ok().withBody("{\"state\":\"PREPARED\"}")));
+            var nativeDataPlane = dataPlaneAt("http://localhost:" + server.getPort() + "/api/v1/dataflows");
+            var client = createClient(nativeDataPlane);
+            var message = DataFlowPrepareMessage.Builder.newInstance()
+                    .agreementId("agreement-id")
+                    .dataFlowId("process-id")
+                    .datasetId("asset-id")
+                    .participantId("participant-id")
+                    .profile("s3-copy")
+                    .build();
+
+            var result = client.prepare(message);
+
+            assertThat(result.succeeded()).isTrue();
+            server.verify(postRequestedFor(urlPathEqualTo("/api/v1/dataflows/prepare"))
+                    .withRequestBody(containing("\"profile\":\"s3-copy-PULL\""))
+                    .withRequestBody(containing("\"dataFlowId\":\"process-id\"")));
+        }
+
+        @Test
         void shouldReadStandardEdcJsonLdResponse() {
             server.stubFor(post(urlPathEqualTo("/prepare")).willReturn(ok().withBody("""
                     {
@@ -238,7 +260,11 @@ class DataPlaneSignalingClientTest {
     }
 
     private DataPlaneInstance dataPlane(AuthorizationProfile... profiles) {
-        var builder = DataPlaneInstance.Builder.newInstance().url("http://localhost:" + server.getPort());
+        return dataPlaneAt("http://localhost:" + server.getPort(), profiles);
+    }
+
+    private DataPlaneInstance dataPlaneAt(String url, AuthorizationProfile... profiles) {
+        var builder = DataPlaneInstance.Builder.newInstance().url(url);
         for (var profile : profiles) {
             builder.authorizationProfile(profile);
         }
