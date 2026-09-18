@@ -36,6 +36,9 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -101,20 +104,27 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
 
     private final Map<String, DataAddress> destinations = new ConcurrentHashMap<>();
     private final ExecutorService transfers = Executors.newFixedThreadPool(2);
+    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final NativeOauth2ClientCredentialsAuthorization authorization =
+            new NativeOauth2ClientCredentialsAuthorization();
     private Dataplane dataplane;
 
     @Override
     public void initialize(ServiceExtensionContext context) {
-        var authorization = authorizationProfile();
+        var authorizationProfile = authorizationProfile();
         var builder = Dataplane.newInstance()
                 .id(dataplaneId)
                 .endpoint(URI.create(dataplaneEndpoint))
-                .authorizationProfile(authorization)
-                .registerAuthorization(new NativeOauth2ClientCredentialsAuthorization())
+                .authorizationProfile(authorizationProfile)
+                .registerAuthorization(authorization)
                 .profile("s3-copy-PULL")
                 .profile("s3-copy-PUSH")
                 .onPrepare(this::prepare)
                 .onStart(this::start)
+                // The standard EDC control plane sends the provider source
+                // address through the started notification after receiving
+                // the DSP TransferStartMessage. Treat that notification as
+                // the actual start of a native pull copy.
                 .onStarted(this::started)
                 .onCompleted(flow -> {
                     destinations.remove(flow.getId());
@@ -169,28 +179,59 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
     }
 
     private Result<DataFlow> started(DataFlow flow) {
-        monitor.debug("Received native S3 started notification for flow %s; transfer was started by the start message"
+        monitor.info("Received native S3 source address for flow %s; starting pull copy"
                 .formatted(flow.getId()));
-        return Result.success(flow);
+        return start(flow);
     }
 
     private void copyAndNotify(String flowId, DataAddress source, DataAddress destination) {
         try {
             copy(source, destination);
             monitor.info("Native S3 copy completed for flow %s".formatted(flowId));
-            var result = dataplane.notifyCompleted(flowId);
-            if (result.failed()) {
-                monitor.severe("Could not notify control plane that flow %s completed: %s"
-                        .formatted(flowId, result.getException().getMessage()));
-            }
+            notifyControlPlane(flowId, "completed", null);
         } catch (Exception error) {
             monitor.severe("Native S3 copy failed for flow %s: %s".formatted(flowId, error.getMessage()), error);
-            var result = dataplane.notifyErrored(flowId, error);
-            if (result.failed()) {
+            try {
+                notifyControlPlane(flowId, "errored", error.getMessage());
+            } catch (Exception notificationError) {
                 monitor.severe("Could not notify control plane that flow %s failed: %s"
-                        .formatted(flowId, result.getException().getMessage()));
+                        .formatted(flowId, notificationError.getMessage()), notificationError);
             }
         }
+    }
+
+    /**
+     * The standalone dataplane SDK builds its callback URL from a callback
+     * field that EDC 0.18 does not populate in the native prepare message.
+     * Notify the EDC control-plane route directly instead of producing a
+     * relative `null/transfers/...` URL.
+     */
+    private void notifyControlPlane(String flowId, String action, String error) throws Exception {
+        var token = authorization.authorizationHeader(authorizationProfile());
+        if (token.failed()) {
+            throw token.getException();
+        }
+
+        var base = controlplaneEndpoint.endsWith("/")
+                ? controlplaneEndpoint.substring(0, controlplaneEndpoint.length() - 1)
+                : controlplaneEndpoint;
+        var url = "%s/transfers/%s/dataflow/%s".formatted(base, flowId, action);
+        var payload = "completed".equals(action)
+                ? "{}"
+                : "{\"state\":\"TERMINATED\",\"error\":"
+                + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(error) + "}";
+        var request = HttpRequest.newBuilder(URI.create(url))
+                .header("Authorization", token.getContent())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload))
+                .build();
+        var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IllegalStateException("Control-plane callback returned HTTP %d: %s"
+                    .formatted(response.statusCode(), response.body()));
+        }
+        monitor.info("Control-plane callback accepted for flow %s: %s (%d)"
+                .formatted(flowId, action, response.statusCode()));
     }
 
     private DataAddress destinationFromMetadata(Map<String, Object> metadata) {
@@ -267,11 +308,15 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
     }
 
     private S3Address s3Config(DataAddress address) {
-        if (!AMAZON_S3.equalsIgnoreCase(address.getType())) {
-            throw new IllegalArgumentException("Unsupported data address type: " + address.getType());
-        }
         var values = new HashMap<String, String>();
         address.endpointProperties().forEach(property -> values.put(normalize(property.name()), property.value()));
+        // DSP DataAddress objects are represented by the signaling SDK with
+        // the generic outer type "DataAddress". The concrete native type is
+        // carried by the endpoint property named "type".
+        var addressType = values.getOrDefault("type", address.getType());
+        if (!AMAZON_S3.equalsIgnoreCase(addressType)) {
+            throw new IllegalArgumentException("Unsupported data address type: " + addressType);
+        }
         var bucket = required(values, "bucketname");
         var key = values.getOrDefault("objectname", values.get("keyname"));
         if (key == null || key.isBlank()) {

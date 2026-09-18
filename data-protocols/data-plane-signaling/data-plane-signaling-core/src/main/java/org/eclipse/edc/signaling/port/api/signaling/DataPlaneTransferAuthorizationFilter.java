@@ -67,7 +67,13 @@ public class DataPlaneTransferAuthorizationFilter implements ContainerRequestFil
         var callerDataPlaneId = authorization.isAuthorized(requestContext::getHeaderString, authorizationProfile)
                 .orElseThrow(f -> new NotAuthorizedException("Not authorized"));
 
-        if (!Objects.equals(dataPlaneId, callerDataPlaneId)) {
+        // In a single-participant deployment the OAuth client used by the
+        // dataplane may be the participant DID rather than the local
+        // dataplane record ID. Accept that explicitly configured client
+        // identity while preserving the original dataplane-ID check.
+        var configuredClientId = authorizationProfile.properties().get("clientId");
+        if (!Objects.equals(dataPlaneId, callerDataPlaneId)
+                && !Objects.equals(String.valueOf(configuredClientId), callerDataPlaneId)) {
             throw new NotAuthorizedException("Not authorized");
         }
     }
