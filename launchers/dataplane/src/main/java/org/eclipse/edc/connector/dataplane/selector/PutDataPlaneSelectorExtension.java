@@ -76,6 +76,9 @@ public class PutDataPlaneSelectorExtension implements ServiceExtension {
     @Setting(key = "edc.dpf.compatibility.authorization.audience", required = false)
     private String compatibilityAuthorizationAudience;
 
+    @Setting(key = "edc.dataplane.endpoint", required = false)
+    private String dataplaneEndpoint;
+
     @Inject
     private ControlApiHttpClient httpClient;
 
@@ -83,7 +86,7 @@ public class PutDataPlaneSelectorExtension implements ServiceExtension {
     public DataPlaneSelectorService dataPlaneSelectorService() {
         return new PutDataPlaneSelectorService(httpClient, selectorApiUrl, compatibilityTransferTypes,
                 compatibilityAuthorizationType, compatibilityTokenEndpoint, compatibilityClientId,
-                compatibilityClientSecret, compatibilityAuthorizationAudience);
+                compatibilityClientSecret, compatibilityAuthorizationAudience, dataplaneEndpoint);
     }
 
     private static final class PutDataPlaneSelectorService implements DataPlaneSelectorService {
@@ -95,11 +98,12 @@ public class PutDataPlaneSelectorExtension implements ServiceExtension {
         private final String compatibilityClientId;
         private final String compatibilityClientSecret;
         private final String compatibilityAuthorizationAudience;
+        private final String dataplaneEndpoint;
 
         private PutDataPlaneSelectorService(ControlApiHttpClient httpClient, String selectorApiUrl, String compatibilityTransferTypes,
                                             String compatibilityAuthorizationType, String compatibilityTokenEndpoint,
                                             String compatibilityClientId, String compatibilityClientSecret,
-                                            String compatibilityAuthorizationAudience) {
+                                            String compatibilityAuthorizationAudience, String dataplaneEndpoint) {
             this.httpClient = httpClient;
             this.selectorApiUrl = selectorApiUrl;
             this.compatibilityTransferTypes = Arrays.stream(compatibilityTransferTypes.split(","))
@@ -111,6 +115,7 @@ public class PutDataPlaneSelectorExtension implements ServiceExtension {
             this.compatibilityClientId = compatibilityClientId;
             this.compatibilityClientSecret = compatibilityClientSecret;
             this.compatibilityAuthorizationAudience = compatibilityAuthorizationAudience;
+            this.dataplaneEndpoint = dataplaneEndpoint;
         }
 
         @Override
@@ -167,7 +172,8 @@ public class PutDataPlaneSelectorExtension implements ServiceExtension {
 
             var builder = Json.createObjectBuilder()
                     .add("dataplaneId", instance.getId())
-                    .add("endpoint", instance.getUrl().toString())
+                    .add("endpoint", dataplaneEndpoint == null || dataplaneEndpoint.isBlank()
+                            ? instance.getUrl().toString() : dataplaneEndpoint)
                     .add("transferTypes", strings(transferTypes))
                     .add("labels", strings(instance.getLabels()));
 
