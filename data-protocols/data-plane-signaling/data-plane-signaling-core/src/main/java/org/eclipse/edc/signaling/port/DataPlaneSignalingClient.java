@@ -38,6 +38,9 @@ import org.eclipse.edc.spi.response.StatusResult;
 import org.eclipse.edc.spi.result.Result;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -109,7 +112,7 @@ public class DataPlaneSignalingClient {
 
     private <T> StatusResult<T> send(String path, Object message, Function<ResponseBody, Result<T>> extractBody) {
         var url = dataPlane.getUrl() + "/" + path;
-        return createRequestBuilder(message, url)
+        return createRequestBuilder(message, url, dataPlane)
                 .compose(builder -> execute(builder, extractBody));
     }
 
@@ -122,8 +125,8 @@ public class DataPlaneSignalingClient {
         }
     }
 
-    private StatusResult<Request.Builder> createRequestBuilder(Object message, String url) {
-        return this.serialize(message)
+    private StatusResult<Request.Builder> createRequestBuilder(Object message, String url, DataPlaneInstance target) {
+        return this.serialize(message, target)
                 .onSuccess(body -> logOutbound(url, body))
                 .map(rawBody -> RequestBody.create(rawBody, TYPE_JSON))
                 .map(body -> new Request.Builder().post(body).url(url))
@@ -204,12 +207,104 @@ public class DataPlaneSignalingClient {
                 .map(header -> requestBuilder.addHeader(header.key(), header.value()));
     }
 
-    private Result<String> serialize(Object message) {
+    private Result<String> serialize(Object message, DataPlaneInstance target) {
         try {
             var mapper = objectMapperSupplier.get();
-            return Result.success(mapper.writeValueAsString(toStandardMessage(message, mapper)));
+            var body = isNativeSdkEndpoint(target)
+                    ? toNativeSdkMessage(message, mapper)
+                    : toStandardMessage(message, mapper);
+            return Result.success(mapper.writeValueAsString(body));
         } catch (RuntimeException | IOException e) {
             return Result.failure(e.getMessage());
+        }
+    }
+
+    private boolean isNativeSdkEndpoint(DataPlaneInstance target) {
+        var path = target.getUrl().getPath();
+        return path != null && path.endsWith("/api/v1/dataflows");
+    }
+
+    /**
+     * The standalone dataplane SDK uses Jackson record property names at its
+     * HTTP boundary, whereas the EDC signaling client uses expanded JSON-LD.
+     * Keep this conversion local to the native SDK endpoint. The consumer
+     * destination is carried in metadata because the SDK 1.1 prepare record
+     * predates the destination field.
+     */
+    private ObjectNode toNativeSdkMessage(Object message, ObjectMapper mapper) {
+        var json = mapper.createObjectNode();
+        if (message instanceof DataFlowPrepareMessage prepare) {
+            add(json, "messageId", prepare.getMessageId());
+            add(json, "participantId", prepare.getParticipantId());
+            add(json, "counterPartyId", prepare.getCounterPartyId());
+            add(json, "dataspaceContext", prepare.getDataspaceContext());
+            add(json, "dataFlowId", prepare.getDataFlowId());
+            add(json, "agreementId", prepare.getAgreementId());
+            add(json, "datasetId", prepare.getDatasetId());
+            add(json, "profile", prepare.getProfile());
+            add(json, "labels", prepare.getLabels(), mapper);
+            add(json, "claims", prepare.getClaims(), mapper);
+
+            var metadata = new LinkedHashMap<String, Object>();
+            if (prepare.getMetadata() != null) {
+                metadata.putAll(prepare.getMetadata());
+            }
+            if (prepare.getDataAddress() != null) {
+                metadata.put(NATIVE_DESTINATION_METADATA, nativeDataAddress(prepare.getDataAddress()));
+            }
+            add(json, "metadata", metadata, mapper);
+        } else if (message instanceof DataFlowStartMessage start) {
+            add(json, "messageId", start.getMessageId());
+            add(json, "participantId", start.getParticipantId());
+            add(json, "counterPartyId", start.getCounterPartyId());
+            add(json, "dataspaceContext", start.getDataspaceContext());
+            add(json, "dataFlowId", start.getDataFlowId());
+            add(json, "agreementId", start.getAgreementId());
+            add(json, "datasetId", start.getDatasetId());
+            add(json, "profile", start.getProfile());
+            add(json, "dataAddress", start.getDataAddress() == null ? null : nativeDataAddress(start.getDataAddress()), mapper);
+            add(json, "labels", start.getLabels(), mapper);
+            add(json, "claims", start.getClaims(), mapper);
+            add(json, "metadata", start.getMetadata(), mapper);
+        } else if (message instanceof DataFlowStartedNotificationMessage started) {
+            add(json, "messageId", started.getMessageId());
+            add(json, "dataAddress", started.getDataAddress() == null ? null : nativeDataAddress(started.getDataAddress()), mapper);
+        } else if (message instanceof DataFlowSuspendMessage suspend) {
+            add(json, "messageId", suspend.getMessageId());
+            add(json, "reason", suspend.getReason());
+        } else if (message instanceof DataFlowResumeMessage resume) {
+            add(json, "messageId", resume.getMessageId());
+            add(json, "processId", resume.getProcessId());
+            add(json, "dataAddress", resume.getDataAddress() == null ? null : nativeDataAddress(resume.getDataAddress()), mapper);
+        } else if (message instanceof DataFlowTerminateMessage terminate) {
+            add(json, "messageId", terminate.getMessageId());
+        } else if (message instanceof Map<?, ?> values) {
+            values.forEach((key, value) -> {
+                if (key != null && value != null) {
+                    json.set(String.valueOf(key), mapper.valueToTree(value));
+                }
+            });
+        } else {
+            throw new IllegalArgumentException("Unsupported data-plane message: " + message.getClass().getName());
+        }
+        return json;
+    }
+
+    private static final String NATIVE_DESTINATION_METADATA = "__edc_destination";
+
+    private Map<String, Object> nativeDataAddress(DspDataAddress address) {
+        var result = new LinkedHashMap<String, Object>();
+        result.put("endpointType", address.getEndpointType());
+        result.put("endpoint", address.getEndpoint());
+        result.put("endpointProperties", address.getEndpointProperties().stream()
+                .map(property -> Map.of("type", "EndpointProperty", "name", property.getName(), "value", property.getValue()))
+                .toList());
+        return result;
+    }
+
+    private void add(ObjectNode json, String key, Object value, ObjectMapper mapper) {
+        if (value != null) {
+            json.set(key, mapper.valueToTree(value));
         }
     }
 
@@ -345,6 +440,9 @@ public class DataPlaneSignalingClient {
             var propertyNameValue = text(object, DSP_NAMESPACE + "name");
             if (propertyNameValue == null) {
                 propertyNameValue = text(object, EDC_NAMESPACE + "name");
+            }
+            if (propertyNameValue == null) {
+                propertyNameValue = text(object, "name");
             }
             final var propertyName = propertyNameValue;
             object.fields().forEachRemaining(entry -> {

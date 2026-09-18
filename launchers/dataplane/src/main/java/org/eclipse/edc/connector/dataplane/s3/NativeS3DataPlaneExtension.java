@@ -47,11 +47,9 @@ import java.util.concurrent.Executors;
  * Native Data Plane Signaling implementation for the GX consumer dataplane.
  *
  * <p>The control plane first prepares the consumer destination. The provider
- * then sends the source address in the DSP started notification. The SDK
- * exposes those as separate lifecycle events, so the destination is retained
- * by flow id until the source arrives. For a pull flow, the dataplane copies
- * the provider S3 object into that destination and reports completion to the
- * control plane.</p>
+ * then sends the source address in the DSP transfer-start message. For a pull
+ * flow, the dataplane copies the provider S3 object into that destination and
+ * reports completion to the control plane.</p>
  */
 @Extension(NativeS3DataPlaneExtension.NAME)
 public class NativeS3DataPlaneExtension implements ServiceExtension {
@@ -60,6 +58,7 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
 
     private static final String OAUTH2_CLIENT_CREDENTIALS = "oauth2_client_credentials";
     private static final String AMAZON_S3 = "AmazonS3";
+    private static final String DESTINATION_METADATA = "__edc_destination";
 
     @Setting(key = "edc.dataplane.id", defaultValue = "gx-participant1-dataplane")
     private String dataplaneId;
@@ -142,21 +141,18 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
         if (!flow.isPull()) {
             return Result.failure(new IllegalArgumentException("Only s3-copy-PULL is implemented by the GX consumer dataplane"));
         }
-        if (flow.getDataAddress() == null) {
+        var destination = flow.getDataAddress() != null
+                ? flow.getDataAddress()
+                : destinationFromMetadata(flow.getMetadata());
+        if (destination == null) {
             return Result.failure(new IllegalArgumentException("The consumer destination address is missing"));
         }
-        destinations.put(flow.getId(), flow.getDataAddress());
-        monitor.info("Prepared native S3 pull flow %s for destination %s".formatted(flow.getId(), describe(flow.getDataAddress())));
+        destinations.put(flow.getId(), destination);
+        monitor.info("Prepared native S3 pull flow %s for destination %s".formatted(flow.getId(), describe(destination)));
         return Result.success(flow);
     }
 
     private Result<DataFlow> start(DataFlow flow) {
-        // The provider source is delivered later by the /started notification.
-        monitor.info("Received native S3 start for flow %s; waiting for source address".formatted(flow.getId()));
-        return Result.success(flow);
-    }
-
-    private Result<DataFlow> started(DataFlow flow) {
         var destination = destinations.get(flow.getId());
         var source = flow.getDataAddress();
         if (destination == null) {
@@ -169,6 +165,12 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
         monitor.info("Starting native S3 copy for flow %s: source=%s destination=%s"
                 .formatted(flow.getId(), describe(source), describe(destination)));
         transfers.execute(() -> copyAndNotify(flow.getId(), source, destination));
+        return Result.success(flow);
+    }
+
+    private Result<DataFlow> started(DataFlow flow) {
+        monitor.debug("Received native S3 started notification for flow %s; transfer was started by the start message"
+                .formatted(flow.getId()));
         return Result.success(flow);
     }
 
@@ -189,6 +191,40 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
                         .formatted(flowId, result.getException().getMessage()));
             }
         }
+    }
+
+    private DataAddress destinationFromMetadata(Map<String, Object> metadata) {
+        if (metadata == null) {
+            return null;
+        }
+        return dataAddressFromObject(metadata.get(DESTINATION_METADATA));
+    }
+
+    private DataAddress dataAddressFromObject(Object value) {
+        if (!(value instanceof Map<?, ?> object)) {
+            return null;
+        }
+        var endpointType = stringValue(object.get("endpointType"));
+        var endpoint = stringValue(object.get("endpoint"));
+        var properties = new java.util.ArrayList<DataAddress.EndpointProperty>();
+        if (object.get("endpointProperties") instanceof Iterable<?> values) {
+            for (var property : values) {
+                if (property instanceof Map<?, ?> propertyObject) {
+                    var type = stringValue(propertyObject.get("type"));
+                    var name = stringValue(propertyObject.get("name"));
+                    var propertyValue = stringValue(propertyObject.get("value"));
+                    if (name != null && propertyValue != null) {
+                        properties.add(new DataAddress.EndpointProperty(
+                                type == null ? "EndpointProperty" : type, name, propertyValue));
+                    }
+                }
+            }
+        }
+        return endpointType == null ? null : new DataAddress(endpointType, endpoint, properties);
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private void copy(DataAddress source, DataAddress destination) throws Exception {
