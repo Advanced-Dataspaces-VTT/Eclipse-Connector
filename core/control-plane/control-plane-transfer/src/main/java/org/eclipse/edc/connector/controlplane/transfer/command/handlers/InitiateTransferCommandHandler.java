@@ -82,6 +82,7 @@ public class InitiateTransferCommandHandler implements CommandHandler<InitiateTr
                 .traceContext(telemetry.getCurrentTraceContext())
                 .participantContextId(participantContext.getId())
                 .dataplaneMetadata(transferRequest.getDataplaneMetadata())
+                .dataDestination(transferRequest.getDataDestination())
                 .build();
 
         return update(process)

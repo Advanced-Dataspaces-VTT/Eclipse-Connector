@@ -234,6 +234,28 @@ POST <management-url>/v5/participants/<participant-context-id>/contractnegotiati
 
 It prints a response containing the negotiation `@id`. Save that ID for the status check. The catalog's first service `endpointURL` is used as the remote DSP address; override it with `--remote-url` when needed.
 
+To list existing negotiations, use the query endpoint. The collection path
+does not support `GET`:
+
+```bash
+ENCODED_PARTICIPANT="$(python3 -c 'import urllib.parse; print(urllib.parse.quote("did:web:gx-participant1.dil.collab-cloud.eu:identity", safe=""))')"
+
+curl -sS \
+  "https://connector.gx-participant1.dil.collab-cloud.eu/api/management/v5/participants/${ENCODED_PARTICIPANT}/contractnegotiations/request" \
+  -H "Authorization: Bearer $GXTOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "@context": ["https://w3id.org/edc/connector/management/v2"],
+    "@type": "QuerySpec",
+    "offset": 0,
+    "limit": 100,
+    "filterExpression": []
+  }' | jq '.[] | {id, state, contractAgreementId, counterPartyId, assetId}'
+```
+
+The returned `id` is the `negotiation_id` used by `check_contract.py` and
+`request_transfer.py`.
+
 ## Check contract state
 
 ```bash
@@ -262,7 +284,7 @@ You can provide the agreement ID directly:
 ```bash
 python3 test_scripts/request_transfer.py \
   --config /tmp/catalog-request.json \
-  --contract-id "agreement:bb359e64-306c-418d-8ab2-bd76f40dbb42" \
+  --contract-id "57ec2f88-fb74-4150-95b2-cc9e721b8eef" \
   --asset-id urn:uuid:1ef99ee3-b156-49a0-91aa-343738ff21e1 \
   --counter-party-address https://dil-connector.material.dil.collab-cloud.eu/api/dsp \
   --transfer-type s3-copy \
@@ -305,8 +327,52 @@ python3 test_scripts/request_transfer.py \
 For `s3-copy`, the provider's catalog identifies the source object, for
 example `provider-minio:dil-data/demo.csv`. Provider credentials and source
 configuration stay on the provider connector. The consumer must have a
-compatible S3 dataplane and destination configuration; do not copy provider
+compatible S3 dataplane and must provide its own destination DataAddress. The
+destination credentials are consumer-side credentials; do not copy provider
 credentials into the management request.
+
+The GX participant uses a separate MinIO application in the `minio` namespace.
+Create `/tmp/gx-s3-destination.json` using its Kubernetes service and credentials:
+
+```bash
+MINIO_ACCESS_KEY="$(kubectl -n minio get secret minio-root \
+  -o jsonpath='{.data.MINIO_ROOT_USER}' | base64 -d)"
+MINIO_SECRET_KEY="$(kubectl -n minio get secret minio-root \
+  -o jsonpath='{.data.MINIO_ROOT_PASSWORD}' | base64 -d)"
+
+jq -n --arg access "$MINIO_ACCESS_KEY" --arg secret "$MINIO_SECRET_KEY" \
+  '{
+    "@context": {"@vocab": "https://w3id.org/edc/v0.0.1/ns/"},
+    "@type": "https://w3id.org/edc/v0.0.1/ns/DataAddress",
+    type: "AmazonS3",
+    bucketName: "dil-data",
+    objectName: "demo.csv",
+    region: "us-east-1",
+    endpointOverride: "http://minio.minio.svc.cluster.local:9000",
+    accessKeyId: $access,
+    secretAccessKey: $secret
+  }' > /tmp/gx-s3-destination.json
+```
+
+The in-cluster endpoint avoids ingress and OIDC authentication. The public S3
+API endpoint, `https://minio-api.gx-participant1.dil.collab-cloud.eu`, can be
+used as an alternative only when the dataplane cannot reach the Kubernetes
+service. The `minio.gx-participant1...` route is the console route and should
+not be used as the S3 endpoint. For production, store the destination
+credentials in Vault and use the connector's supported secret alias mechanism
+instead of putting them in a request file.
+
+Start the transfer with:
+
+```bash
+python3 test_scripts/request_transfer.py \
+  --config /tmp/catalog-request.json \
+  --negotiation-id <negotiation-id> \
+  --counter-party-address https://dil-connector.material.dil.collab-cloud.eu/api/dsp \
+  --transfer-type s3-copy \
+  --data-destination /tmp/gx-s3-destination.json \
+  --output /tmp/transfer-response.json
+```
 
 ## Check a transfer
 

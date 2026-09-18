@@ -17,6 +17,9 @@ plugins {
 dependencies {
     // Includes the control plane, DSP HTTP endpoints and data-plane signaling.
     implementation(project(":dist:bom:controlplane-dcp-bom"))
+    // Provides the selector implementation used by the control plane's
+    // transfer signaling integration.
+    implementation(project(":core:control-plane:control-plane-aggregate-services"))
     implementation(project(":extensions:control-plane:api:management-api-v5"))
     implementation(project(":core:common:cel-core"))
     implementation(project(":extensions:common:api:management-api-authorization"))
@@ -30,31 +33,17 @@ dependencies {
     implementation(project(":extensions:common:iam:decentralized-claims:decentralized-claims-sts:decentralized-claims-sts-registry"))
     implementation(project(":extensions:common:iam:decentralized-claims:decentralized-claims-sts:decentralized-claims-sts-remote-registrar"))
 
-    // Shared services required by the embedded data-plane runtime.
-    implementation("org.eclipse.edc:control-api-configuration:0.18.0")
-    implementation("org.eclipse.edc:control-plane-api-client:0.18.0")
-    implementation("org.eclipse.edc:transfer-data-plane-signaling:0.18.0")
-    implementation("org.eclipse.edc:validator-lib:0.18.0")
-    implementation("org.eclipse.edc:http-lib:0.18.0")
-
-    // Embed the EDC 0.18 data-plane runtime in this control-plane image.
-    // These are published EDC modules because this customized source tree no
-    // longer carries the standalone data-plane subprojects.
-    implementation("org.eclipse.edc:data-plane-core:0.18.0")
-    implementation("org.eclipse.edc:data-plane-http:0.18.0")
-    implementation("org.eclipse.edc:data-plane-http-oauth2:0.18.0")
-    implementation("org.eclipse.edc:data-plane-iam:0.18.0")
-    implementation("org.eclipse.edc:data-plane-self-registration:0.18.0")
-    implementation("org.eclipse.edc:data-plane-signaling-api:0.18.0")
-    implementation("org.eclipse.edc:data-plane-signaling-client:0.18.0")
-    implementation("org.eclipse.edc:data-plane-selector-client:0.18.0")
-    implementation("org.eclipse.edc:data-plane-store-sql:0.18.0")
-    implementation("org.eclipse.edc:validator-data-address-http-data:0.18.0")
-    implementation("org.eclipse.edc.aws:data-plane-aws-s3:0.18.0")
-    implementation("org.eclipse.edc.aws:validator-data-address-s3:0.18.0")
-
     // JSON-P implementation required at runtime by the connector extensions.
     runtimeOnly(libs.parsson)
+}
+
+// The embedded compatibility helpers pull the old 0.18 web-spi transitively.
+// Its SchemaType shadows this source tree's web SPI and breaks JSON-LD request
+// deserialization at runtime. The separate dataplane launcher still declares
+// the compatibility web SPI it needs, so keep this exclusion local to the
+// control-plane image.
+configurations.configureEach {
+    exclude(group = "org.eclipse.edc", module = "web-spi")
 }
 
 application {

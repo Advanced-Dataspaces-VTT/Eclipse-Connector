@@ -16,6 +16,7 @@
 package org.eclipse.edc.connector.controlplane.transfer.spi.types;
 
 import org.eclipse.edc.connector.controlplane.asset.spi.domain.DataplaneMetadata;
+import org.eclipse.edc.spi.types.domain.DataAddress;
 import org.eclipse.edc.spi.types.domain.callback.CallbackAddress;
 
 import java.util.ArrayList;
@@ -38,6 +39,7 @@ public class TransferRequest {
     public static final String TRANSFER_REQUEST_PROFILE = EDC_NAMESPACE + "profile";
     public static final String TRANSFER_REQUEST_CALLBACK_ADDRESSES = EDC_NAMESPACE + "callbackAddresses";
     public static final String TRANSFER_REQUEST_DATAPLANE_METADATA = EDC_NAMESPACE + "dataplaneMetadata";
+    public static final String TRANSFER_REQUEST_DATA_DESTINATION = EDC_NAMESPACE + "dataDestination";
 
     private String id;
     private String protocol;
@@ -47,6 +49,7 @@ public class TransferRequest {
     private Map<String, Object> privateProperties = new HashMap<>();
     private List<CallbackAddress> callbackAddresses = new ArrayList<>();
     private DataplaneMetadata dataplaneMetadata;
+    private DataAddress dataDestination;
 
     public String getCounterPartyAddress() {
         return counterPartyAddress;
@@ -79,6 +82,10 @@ public class TransferRequest {
 
     public DataplaneMetadata getDataplaneMetadata() {
         return dataplaneMetadata;
+    }
+
+    public DataAddress getDataDestination() {
+        return dataDestination;
     }
 
     public static final class Builder {
@@ -135,6 +142,11 @@ public class TransferRequest {
 
         public Builder dataplaneMetadata(DataplaneMetadata dataplaneMetadata) {
             request.dataplaneMetadata = dataplaneMetadata;
+            return this;
+        }
+
+        public Builder dataDestination(DataAddress dataDestination) {
+            request.dataDestination = dataDestination;
             return this;
         }
 

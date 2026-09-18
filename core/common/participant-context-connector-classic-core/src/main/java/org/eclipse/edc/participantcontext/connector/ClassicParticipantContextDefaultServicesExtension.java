@@ -51,36 +51,50 @@ public class ClassicParticipantContextDefaultServicesExtension implements Servic
 
     @Provider(isDefault = true)
     public SingleParticipantContextSupplier participantContextSupplier(ServiceExtensionContext context) {
-        var configuredParticipantId = configuredValue(context, "edc.participant.id", participantId);
-        var configuredContextId = configuredValue(context, "edc.participant.context.id", participantContextId);
+        var configuredParticipantId = resolveSetting(context, "edc.participant.id", participantId);
+        var configuredContextId = resolveSetting(context, "edc.participant.context.id", participantContextId);
         var contextId = configuredContextId != null ? configuredContextId : configuredParticipantId;
         if (configuredParticipantId == null || contextId == null) {
             throw new IllegalStateException("Both edc.participant.id and edc.participant.context.id must be configured");
         }
-        var participantContextBuilder = ParticipantContext.Builder.newInstance();
-        // The local source and published 0.18 runtime expose different
-        // descriptors for this inherited builder method. Reflection avoids
-        // linking against either covariant return type.
-        try {
-            participantContextBuilder.getClass()
-                    .getMethod("participantContextId", String.class)
-                    .invoke(participantContextBuilder, contextId);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("ParticipantContext builder does not support participantContextId", e);
-        }
-        var participantContext = participantContextBuilder.identity(configuredParticipantId).build();
+        var participantContext = participantContextBuilder(contextId)
+                .identity(configuredParticipantId)
+                .build();
         return () -> ServiceResult.success(participantContext);
     }
 
-    private String configuredValue(ServiceExtensionContext context, String key, String defaultValue) {
-        var value = context.getConfig().getString(key, defaultValue);
-        return value != null ? value : System.getProperty(key, defaultValue);
+    private String resolveSetting(ServiceExtensionContext context, String key, String settingValue) {
+        var value = context.getConfig().getString(key, settingValue);
+        if (value == null || value.isBlank()) {
+            value = System.getProperty(key, settingValue);
+        }
+        if (value == null || value.isBlank()) {
+            var envKey = key.toUpperCase().replace('.', '_');
+            value = System.getenv(envKey);
+        }
+        return value == null || value.isBlank() ? null : value;
+    }
+
+    private ParticipantContext.Builder participantContextBuilder(String contextId) {
+        var builder = ParticipantContext.Builder.newInstance();
+        try {
+            // 0.18 stores the context key separately from Entity.id. Invoke
+            // both builder APIs so this launcher also works with the older
+            // ParticipantContext ABI present in this source tree.
+            builder.getClass().getMethod("participantContextId", String.class).invoke(builder, contextId);
+            builder.getClass().getMethod("id", String.class).invoke(builder, contextId);
+            return builder;
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("ParticipantContext builder does not support the required identifier API", e);
+        }
     }
 
 
     @Provider
     public ParticipantContextConfigStore participantContextConfigStore(ServiceExtensionContext context) {
-        var contextId = participantContextId != null ? participantContextId : participantId;
+        var configuredParticipantId = resolveSetting(context, "edc.participant.id", participantId);
+        var configuredContextId = resolveSetting(context, "edc.participant.context.id", participantContextId);
+        var contextId = configuredContextId != null ? configuredContextId : configuredParticipantId;
 
         var cfg = ParticipantContextConfiguration.Builder.newInstance()
                 .participantContextId(contextId)
@@ -94,17 +108,17 @@ public class ClassicParticipantContextDefaultServicesExtension implements Servic
         // Keep this compatible with runtimes assembled from published 0.18
         // dataplane modules: explicitly resolve the values from the merged
         // configuration instead of relying only on field setting injection.
-        participantId = configuredValue(context, "edc.participant.id", participantId);
-        participantContextId = configuredValue(context, "edc.participant.context.id", participantContextId);
+        participantId = resolveSetting(context, "edc.participant.id", participantId);
+        participantContextId = resolveSetting(context, "edc.participant.context.id", participantContextId);
+        if (participantContextId == null) {
+            participantContextId = participantId;
+        }
 
-        if (participantId == null || participantContextId == null) {
+        if (participantId == null) {
             throw new IllegalStateException("Both edc.participant.id and edc.participant.context.id must be configured");
         }
         if (ANONYMOUS_PARTICIPANT.equals(participantContextId)) {
             monitor.warning("The runtime is configured as an anonymous participant. DO NOT DO THIS IN PRODUCTION.");
-        }
-        if (participantContextId == null) {
-            monitor.warning("The runtime is not configured with a participant context id. Using the participant id as the context id.");
         }
     }
 

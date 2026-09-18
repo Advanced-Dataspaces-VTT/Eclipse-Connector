@@ -14,5 +14,5 @@ COPY --from=build /workspace/launchers/controlplane/build/libs/controlplane.jar 
 
 USER edc
 ENV EDC_FS_CONFIG=/app/configuration.properties
-EXPOSE 8080 8081 8082 8083 11001
+EXPOSE 8080 8081 8082 8083
 ENTRYPOINT ["java", "-jar", "/app/controlplane.jar"]

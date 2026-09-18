@@ -30,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferRequest.TRANSFER_REQUEST_CONTRACT_ID;
 import static org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferRequest.TRANSFER_REQUEST_COUNTER_PARTY_ADDRESS;
 import static org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferRequest.TRANSFER_REQUEST_DATAPLANE_METADATA;
+import static org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferRequest.TRANSFER_REQUEST_DATA_DESTINATION;
 import static org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferRequest.TRANSFER_REQUEST_PRIVATE_PROPERTIES;
 import static org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferRequest.TRANSFER_REQUEST_PROFILE;
 import static org.eclipse.edc.connector.controlplane.transfer.spi.types.TransferRequest.TRANSFER_REQUEST_PROTOCOL;
@@ -73,6 +74,10 @@ class JsonObjectToTransferRequestTransformerTest {
                 .add(TRANSFER_REQUEST_PROTOCOL, "protocol")
                 .add(TRANSFER_REQUEST_DATAPLANE_METADATA, createObjectBuilder()
                         .add("labels", Json.createArrayBuilder().add("label")))
+                .add(TRANSFER_REQUEST_DATA_DESTINATION, createObjectBuilder()
+                        .add("type", "AmazonS3")
+                        .add("bucketName", "participant-data")
+                        .add("objectName", "demo.csv"))
                 .build();
 
         var result = transformer.transform(json, context);
@@ -84,6 +89,7 @@ class JsonObjectToTransferRequestTransformerTest {
         assertThat(result.getProtocol()).isEqualTo("protocol");
         assertThat(result.getTransferType()).isEqualTo("Http-Pull");
         assertThat(result.getDataplaneMetadata()).isSameAs(dataplaneMetadata);
+        assertThat(result.getDataDestination()).isSameAs(dataDestination);
     }
 
     @Test

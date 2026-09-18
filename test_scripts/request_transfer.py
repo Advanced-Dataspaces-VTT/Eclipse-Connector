@@ -12,6 +12,9 @@ from urllib.parse import quote
 from edc_test_utils import DEFAULT_PROFILE, MANAGEMENT_CONTEXT, add_common_arguments, choose, load_config, management_settings, request_json
 
 
+EDC_VOCAB = "https://w3id.org/edc/v0.0.1/ns/"
+
+
 def read_json_file(path: str):
     try:
         with Path(path).open(encoding="utf-8") as stream:
@@ -19,6 +22,27 @@ def read_json_file(path: str):
     except (OSError, json.JSONDecodeError) as exc:
         raise SystemExit(f"Cannot read JSON file '{path}': {exc}") from exc
     return value
+
+
+def normalize_data_destination(value: dict) -> dict:
+    """Make a simple destination object valid as an embedded EDC DataAddress."""
+    data_address = dict(value)
+    data_address_type = data_address.get("type") or data_address.get(f"{EDC_VOCAB}type")
+    if not data_address_type:
+        raise SystemExit("data destination JSON must contain an object with a type")
+
+    data_address.setdefault("@type", f"{EDC_VOCAB}DataAddress")
+    context = data_address.get("@context")
+    if context is None:
+        data_address["@context"] = {"@vocab": EDC_VOCAB}
+    elif isinstance(context, dict):
+        data_address["@context"] = {"@vocab": EDC_VOCAB, **context}
+    elif not isinstance(context, list):
+        data_address["@context"] = [context, {"@vocab": EDC_VOCAB}]
+    elif not any(isinstance(item, dict) and "@vocab" in item for item in context):
+        data_address["@context"] = [*context, {"@vocab": EDC_VOCAB}]
+    return data_address
+
 
 
 def main() -> int:
@@ -32,6 +56,7 @@ def main() -> int:
     parser.add_argument("--profile", help=f"Registered EDC transfer profile (default: {DEFAULT_PROFILE})")
     parser.add_argument("--protocol", help="Registered protocol; use instead of --profile")
     parser.add_argument("--dataplane-metadata", help="JSON file containing dataplaneMetadata")
+    parser.add_argument("--data-destination", help="JSON file containing the consumer S3 destination DataAddress")
     parser.add_argument("--callback-addresses", help="JSON file containing callbackAddresses array")
     parser.add_argument("--output", help="Write the transfer response to this file")
     args = parser.parse_args()
@@ -88,6 +113,13 @@ def main() -> int:
         body["protocol"] = protocol
     if asset_id:
         body["assetId"] = asset_id
+
+    data_destination = args.data_destination or config.get("data_destination_file")
+    if data_destination:
+        value = read_json_file(data_destination)
+        if not isinstance(value, dict):
+            raise SystemExit("data destination JSON must contain an object with a type")
+        body["dataDestination"] = normalize_data_destination(value)
 
     dataplane_metadata = args.dataplane_metadata or config.get("dataplane_metadata_file")
     if dataplane_metadata:

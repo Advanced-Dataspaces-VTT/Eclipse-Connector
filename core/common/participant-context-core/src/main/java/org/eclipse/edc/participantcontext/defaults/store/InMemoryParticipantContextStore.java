@@ -44,20 +44,22 @@ public class InMemoryParticipantContextStore implements ParticipantContextStore 
 
     @Override
     public StoreResult<Void> create(ParticipantContext participantContext) {
-        var prev = participants.putIfAbsent(participantContext.getId(), participantContext);
+        var id = participantContext.getParticipantContextId();
+        var prev = participants.putIfAbsent(id, participantContext);
         if (prev != null) {
-            return StoreResult.alreadyExists(alreadyExistsErrorMessage(participantContext.getId()));
+            return StoreResult.alreadyExists(alreadyExistsErrorMessage(id));
         }
         return StoreResult.success();
     }
 
     @Override
     public StoreResult<Void> update(ParticipantContext participantContext) {
-        var prev = participants.replace(participantContext.getId(), participantContext);
+        var id = participantContext.getParticipantContextId();
+        var prev = participants.replace(id, participantContext);
         if (prev != null) {
             return StoreResult.success();
         } else {
-            return StoreResult.notFound(notFoundErrorMessage(participantContext.getId()));
+            return StoreResult.notFound(notFoundErrorMessage(id));
         }
     }
 
