@@ -342,10 +342,18 @@ public class DataPlaneSignalingClient {
     private void redactSecrets(JsonNode node) {
         if (node.isObject()) {
             var object = (ObjectNode) node;
+            var propertyNameValue = text(object, DSP_NAMESPACE + "name");
+            if (propertyNameValue == null) {
+                propertyNameValue = text(object, EDC_NAMESPACE + "name");
+            }
+            final var propertyName = propertyNameValue;
             object.fields().forEachRemaining(entry -> {
                 var name = entry.getKey().toLowerCase();
+                var endpointPropertySecret = "value".equalsIgnoreCase(entry.getKey())
+                        && propertyName != null
+                        && isSecretName(propertyName);
                 if (name.contains("secret") || name.contains("password") || name.contains("token")
-                        || name.contains("accesskey")) {
+                        || name.contains("accesskey") || endpointPropertySecret) {
                     object.put(entry.getKey(), "<redacted>");
                 } else {
                     redactSecrets(entry.getValue());
@@ -354,6 +362,12 @@ public class DataPlaneSignalingClient {
         } else if (node.isArray()) {
             node.forEach(this::redactSecrets);
         }
+    }
+
+    private boolean isSecretName(String name) {
+        var normalized = name.toLowerCase();
+        return normalized.contains("secret") || normalized.contains("password")
+                || normalized.contains("token") || normalized.contains("accesskey");
     }
 
     private String text(JsonNode node, String key) {

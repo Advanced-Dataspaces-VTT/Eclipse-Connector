@@ -16,7 +16,6 @@ import org.eclipse.dataplane.domain.Result;
 import org.eclipse.dataplane.domain.dataflow.DataFlow;
 import org.eclipse.dataplane.domain.registration.AuthorizationProfile;
 import org.eclipse.dataplane.domain.registration.ControlPlaneRegistrationMessage;
-import org.eclipse.dataplane.domain.registration.Oauth2ClientCredentialsAuthorization;
 import org.eclipse.dataplane.port.DataPlaneRegistrationApiController;
 import org.eclipse.dataplane.port.DataPlaneSignalingApiController;
 import org.eclipse.edc.runtime.metamodel.annotation.Extension;
@@ -80,6 +79,9 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
     @Setting(key = "edc.dpf.compatibility.authorization.client.secret", required = false)
     private String clientSecret;
 
+    @Setting(key = "edc.dpf.compatibility.authorization.audience", required = false)
+    private String audience;
+
     @Setting(key = "edc.dpf.compatibility.controlplane.id", required = false)
     private String controlplaneId;
 
@@ -103,7 +105,7 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
                 .id(dataplaneId)
                 .endpoint(URI.create(controlEndpoint + "/v1/dataflows"))
                 .authorizationProfile(authorization)
-                .registerAuthorization(new Oauth2ClientCredentialsAuthorization())
+                .registerAuthorization(new NativeOauth2ClientCredentialsAuthorization())
                 .profile("s3-copy-PULL")
                 .profile("s3-copy-PUSH")
                 .onPrepare(this::prepare)
@@ -276,6 +278,9 @@ public class NativeS3DataPlaneExtension implements ServiceExtension {
         }
         if (clientSecret != null) {
             profile.withAttribute("clientSecret", clientSecret);
+        }
+        if (audience != null && !audience.isBlank()) {
+            profile.withAttribute("audience", audience);
         }
         return profile;
     }

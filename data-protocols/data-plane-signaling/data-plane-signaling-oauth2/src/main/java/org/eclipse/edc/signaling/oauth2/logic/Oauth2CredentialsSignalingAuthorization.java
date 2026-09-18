@@ -150,10 +150,16 @@ public class Oauth2CredentialsSignalingAuthorization implements SignalingAuthori
                 .grantType("client_credentials")
                 .url((String) properties.get("tokenEndpoint"))
                 .clientId((String) properties.get("clientId"))
-                .clientSecret((String) properties.get("clientSecret"))
-                .build();
+                .clientSecret((String) properties.get("clientSecret"));
 
-        return oauth2Client.requestToken(credentialsRequest)
+        // IdentityHub's STS requires an audience for client-credentials requests.
+        // Keep this optional so existing OAuth2 providers remain compatible.
+        var audience = properties.get("audience");
+        if (audience instanceof String value && !value.isBlank()) {
+            credentialsRequest.param("audience", value);
+        }
+
+        return oauth2Client.requestToken(credentialsRequest.build())
                 .map(token -> new Header("Authorization", "Bearer " + token.getToken()));
     }
 
